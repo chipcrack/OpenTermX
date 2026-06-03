@@ -1,0 +1,93 @@
+.tabs {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  overflow-x: auto;
+  min-height: 56px;
+  padding: 0.75rem;
+  border-bottom: 1px solid var(--color-border);
+  background: color-mix(in srgb, var(--color-terminal-bg) 88%, transparent);
+}
+
+.tab {
+  display: flex;
+  align-items: center;
+  flex: 0 0 auto;
+  gap: 0.35rem;
+  border: 1px solid transparent;
+  border-radius: 0.9rem;
+  background: color-mix(in srgb, var(--color-panel) 82%, var(--color-terminal-bg));
+  color: var(--color-muted);
+  padding: 0.2rem 0.35rem 0.2rem 0.6rem;
+}
+
+.tabActive {
+  border-color: color-mix(in srgb, var(--color-primary) 60%, transparent);
+  color: var(--color-text);
+}
+
+.tabButton,
+.closeButton {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.tabButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  min-width: 0;
+  white-space: nowrap;
+  padding: 0.45rem 0;
+}
+
+.closeButton {
+  border-radius: 999px;
+  padding: 0.2rem 0.45rem;
+}
+
+.closeButton:hover {
+  background: rgba(148, 163, 184, 0.14);
+}
+
+.tabStatus {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 999px;
+}
+
+.tabStatusConnected {
+  background: #22c55e;
+  box-shadow: 0 0 12px rgba(34, 197, 94, 0.7);
+}
+
+.tabStatusPending {
+  background: #f59e0b;
+  box-shadow: 0 0 12px rgba(245, 158, 11, 0.6);
+}
+
+@media (max-width: 960px), (max-height: 760px) {
+  .tabs {
+    min-height: 48px;
+    padding: 0.55rem;
+    gap: 0.4rem;
+  }
+
+  .tab {
+    border-radius: 0.75rem;
+    padding: 0.16rem 0.28rem 0.16rem 0.48rem;
+  }
+
+  .tabButton {
+    gap: 0.34rem;
+    padding: 0.34rem 0;
+    font-size: 0.78rem;
+  }
+
+  .closeButton {
+    padding: 0.15rem 0.35rem;
+    font-size: 0.76rem;
+  }
+}

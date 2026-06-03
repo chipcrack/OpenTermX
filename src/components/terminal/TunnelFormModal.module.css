@@ -1,0 +1,73 @@
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 0.9rem;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.field span {
+  color: var(--color-muted);
+  font-size: 0.9rem;
+}
+
+.field input,
+.field select {
+  width: 100%;
+  border: 1px solid var(--color-border);
+  border-radius: 0.9rem;
+  background: var(--color-input);
+  color: var(--color-text);
+  padding: 0.78rem 0.9rem;
+}
+
+.actions,
+.submitGroup {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.primaryButton,
+.secondaryButton,
+.dangerButton {
+  border-radius: 999px;
+  padding: 0.72rem 0.95rem;
+  cursor: pointer;
+  color: var(--color-text);
+}
+
+.primaryButton {
+  border: 1px solid var(--color-primary);
+  background: var(--color-accent-soft);
+}
+
+.secondaryButton {
+  border: 1px solid var(--color-border);
+  background: transparent;
+}
+
+.dangerButton {
+  border: 1px solid rgba(248, 113, 113, 0.4);
+  background: rgba(127, 29, 29, 0.2);
+}
+
+@media (max-width: 720px) {
+  .actions,
+  .submitGroup {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+  }
+}

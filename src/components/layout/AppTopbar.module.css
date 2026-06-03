@@ -1,0 +1,230 @@
+.bar {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 1rem;
+  min-height: 68px;
+  padding: 0.9rem 1.25rem;
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-panel);
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  min-width: 0;
+}
+
+.brandMark {
+  display: block;
+  width: 2.35rem;
+  height: 2.35rem;
+  border-radius: 0.85rem;
+  object-fit: cover;
+  box-shadow: 0 10px 24px color-mix(in srgb, var(--color-shadow) 80%, transparent);
+}
+
+.brandTitle,
+.brandSubtitle {
+  display: block;
+}
+
+.brandTitle {
+  font-size: 1rem;
+}
+
+.brandSubtitle {
+  margin-top: 0.18rem;
+  color: var(--color-muted);
+  font-size: 0.82rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.actions,
+.utilities {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.actions {
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.utilities {
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+
+.counter {
+  color: var(--color-muted);
+  font-size: 0.82rem;
+  white-space: nowrap;
+}
+
+.primaryButton,
+.secondaryButton {
+  border-radius: 999px;
+  padding: 0.65rem 0.95rem;
+  color: var(--color-text);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.primaryButton {
+  border: 1px solid var(--color-primary-strong);
+  background: var(--color-accent-soft);
+}
+
+.secondaryButton {
+  border: 1px solid var(--color-border);
+  background: var(--color-panel-elevated);
+}
+
+.themeSwitch {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.65rem;
+  color: var(--color-text-soft);
+  user-select: none;
+  cursor: pointer;
+}
+
+.themeSwitch input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.track {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  width: 3rem;
+  height: 1.7rem;
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  background: var(--color-panel-elevated);
+  transition: background 0.2s ease;
+}
+
+.thumb {
+  position: absolute;
+  top: 0.15rem;
+  left: 0.16rem;
+  width: 1.1rem;
+  height: 1.1rem;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #f8fafc, #cbd5e1);
+  box-shadow: 0 6px 14px rgba(15, 23, 42, 0.18);
+  transition: transform 0.2s ease;
+}
+
+.themeSwitch input:checked + .track {
+  background: rgba(59, 130, 246, 0.22);
+}
+
+.themeSwitch input:checked + .track .thumb {
+  transform: translateX(1.28rem);
+  background: linear-gradient(135deg, #ffffff, #dbeafe);
+}
+
+.themeLabel {
+  min-width: 3rem;
+  font-size: 0.85rem;
+}
+
+@media (max-width: 980px) {
+  .bar {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.8rem 1rem;
+  }
+
+  .actions,
+  .utilities {
+    justify-content: flex-end;
+  }
+
+  .brandMark {
+    width: 2rem;
+    height: 2rem;
+    border-radius: 0.7rem;
+  }
+
+  .brandTitle {
+    font-size: 0.94rem;
+  }
+
+  .brandSubtitle {
+    font-size: 0.76rem;
+  }
+
+  .primaryButton,
+  .secondaryButton {
+    padding: 0.55rem 0.82rem;
+    font-size: 0.78rem;
+  }
+
+  .counter,
+  .themeLabel {
+    font-size: 0.78rem;
+  }
+}
+
+@media (max-width: 720px) {
+  .bar {
+    padding: 0.7rem 0.85rem;
+    grid-template-columns: minmax(0, 1fr);
+    align-items: stretch;
+  }
+
+  .actions,
+  .utilities {
+    width: 100%;
+    gap: 0.5rem;
+    justify-content: flex-start;
+  }
+
+  .primaryButton,
+  .secondaryButton {
+    flex: 0 1 auto;
+    padding: 0.5rem 0.72rem;
+    font-size: 0.74rem;
+  }
+
+  .themeSwitch {
+    gap: 0.5rem;
+  }
+
+  .track {
+    width: 2.7rem;
+    height: 1.5rem;
+  }
+
+  .thumb {
+    width: 0.96rem;
+    height: 0.96rem;
+  }
+
+  .themeSwitch input:checked + .track .thumb {
+    transform: translateX(1.14rem);
+  }
+}
+
+@media (max-width: 540px) {
+  .actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .primaryButton,
+  .secondaryButton {
+    width: 100%;
+  }
+}

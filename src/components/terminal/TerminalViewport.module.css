@@ -1,0 +1,32 @@
+.viewport {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+  padding: 0.65rem;
+  background: var(--color-terminal-bg);
+}
+
+.viewport :global(.xterm) {
+  flex: 1;
+  height: 100%;
+  color: var(--color-text);
+  background: var(--color-terminal-bg);
+  border-radius: 0.85rem;
+}
+
+.viewport :global(.xterm-screen),
+.viewport :global(.xterm-viewport),
+.viewport :global(.xterm-scroll-area) {
+  background: var(--color-terminal-bg);
+}
+
+.viewport :global(.xterm-screen canvas) {
+  border-radius: 0.75rem;
+}
+
+.viewport :global(.xterm-viewport) {
+  overflow-y: auto !important;
+  overscroll-behavior: contain;
+}
