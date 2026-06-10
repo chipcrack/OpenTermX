@@ -229,13 +229,3 @@ Este workflow:
    git tag v0.1.0
    git push origin v0.1.0
    ```
-
-También puedes ejecutarlo manualmente desde `Actions > build-release > Run workflow`.
-
-## Próximos pasos sugeridos
-
-1. integrar cliente SSH en Rust
-2. conectar xterm.js a procesos reales
-3. implementar explorador SFTP real
-4. agregar cifrado para credenciales locales
-5. incorporar logs, snippets y monitor de recursos
