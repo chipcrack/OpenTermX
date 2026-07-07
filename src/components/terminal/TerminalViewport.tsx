@@ -9,6 +9,7 @@ import styles from './TerminalViewport.module.css';
 interface TerminalViewportProps {
   session: Session;
   tabId: string;
+  isActive: boolean;
 }
 
 function buildAnsiPalette(themeMode: ThemeMode) {
@@ -79,18 +80,23 @@ function buildTerminalTheme(themeMode: ThemeMode) {
       };
 }
 
-export function TerminalViewport({ session, tabId }: TerminalViewportProps) {
+export function TerminalViewport({ session, tabId, isActive }: TerminalViewportProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const terminalRef = useRef<any>(null);
   const fitAddonRef = useRef<any>(null);
   const shellIdRef = useRef<string | null>(null);
+  const isActiveRef = useRef(isActive);
+  const bootstrappedRef = useRef(false);
+  const openingRef = useRef(false);
   const pollTimerRef = useRef<number | null>(null);
   const inputFlushTimerRef = useRef<number | null>(null);
   const resizeObserverRef = useRef<ResizeObserver | null>(null);
   const inputDisposableRef = useRef<{ dispose: () => void } | null>(null);
+  const syncTransportLoopRef = useRef<((forceFlush?: boolean) => void) | null>(null);
   const inputBufferRef = useRef('');
   const readingRef = useRef(false);
   const setTabConnection = useSessionStore((state) => state.setTabConnection);
+  const setTabShellId = useSessionStore((state) => state.setTabShellId);
   const themeMode = useUiStore((state) => state.theme);
 
   useEffect(() => {
@@ -112,13 +118,35 @@ export function TerminalViewport({ session, tabId }: TerminalViewportProps) {
   }, [themeMode]);
 
   useEffect(() => {
+    isActiveRef.current = isActive;
+
+    if (!terminalRef.current) {
+      return;
+    }
+
+    if (isActive) {
+      fitAddonRef.current?.fit();
+
+      if (shellIdRef.current) {
+        void desktopApi.resizeTerminal(
+          shellIdRef.current,
+          terminalRef.current.cols,
+          terminalRef.current.rows
+        );
+      }
+    }
+
+    syncTransportLoopRef.current?.(isActive);
+  }, [isActive]);
+
+  useEffect(() => {
     if (!containerRef.current) {
       return;
     }
 
     let disposed = false;
 
-    const cleanup = () => {
+    const clearTransportLoops = () => {
       if (pollTimerRef.current !== null) {
         window.clearInterval(pollTimerRef.current);
         pollTimerRef.current = null;
@@ -128,16 +156,23 @@ export function TerminalViewport({ session, tabId }: TerminalViewportProps) {
         window.clearInterval(inputFlushTimerRef.current);
         inputFlushTimerRef.current = null;
       }
+    };
 
+    const cleanup = () => {
+      clearTransportLoops();
+      syncTransportLoopRef.current = null;
       resizeObserverRef.current?.disconnect();
       resizeObserverRef.current = null;
       inputDisposableRef.current?.dispose();
       inputDisposableRef.current = null;
       inputBufferRef.current = '';
       readingRef.current = false;
+      bootstrappedRef.current = false;
+      openingRef.current = false;
 
       if (shellIdRef.current) {
         void desktopApi.closeTerminal(shellIdRef.current);
+        setTabShellId(tabId, null);
         shellIdRef.current = null;
       }
 
@@ -148,9 +183,11 @@ export function TerminalViewport({ session, tabId }: TerminalViewportProps) {
 
     void Promise.all([import('@xterm/xterm'), import('@xterm/addon-fit')]).then(
       async ([xtermModule, fitModule]) => {
-        if (disposed || !containerRef.current) {
+        if (disposed || !containerRef.current || bootstrappedRef.current || openingRef.current) {
           return;
         }
+
+        openingRef.current = true;
 
         const terminal = new xtermModule.Terminal({
           cursorBlink: true,
@@ -172,13 +209,14 @@ export function TerminalViewport({ session, tabId }: TerminalViewportProps) {
 
         terminalRef.current = terminal;
         fitAddonRef.current = fitAddon;
+        bootstrappedRef.current = true;
 
         const colors = buildAnsiPalette(themeMode);
         terminal.writeln(
-          `${colors.accent}OpenTermX${colors.reset} ${colors.muted}• terminal remota${colors.reset}`
+          `${colors.accent}OpenTermX${colors.reset} ${colors.muted}- terminal remota${colors.reset}`
         );
         terminal.writeln(
-          `${colors.info}${session.username}@${session.host}:${session.port}${colors.reset} ${colors.muted}• ${session.name}${colors.reset}`
+          `${colors.info}${session.username}@${session.host}:${session.port}${colors.reset} ${colors.muted}- ${session.name}${colors.reset}`
         );
         terminal.writeln(`${colors.muted}Preparando terminal interactiva...${colors.reset}`);
         terminal.writeln('');
@@ -204,12 +242,9 @@ export function TerminalViewport({ session, tabId }: TerminalViewportProps) {
 
             if (output.closed) {
               setTabConnection(tabId, false);
+              setTabShellId(tabId, null);
               shellIdRef.current = null;
-
-              if (pollTimerRef.current !== null) {
-                window.clearInterval(pollTimerRef.current);
-                pollTimerRef.current = null;
-              }
+              clearTransportLoops();
             }
           } catch (error) {
             if (!disposed && terminalRef.current) {
@@ -247,6 +282,28 @@ export function TerminalViewport({ session, tabId }: TerminalViewportProps) {
           }
         };
 
+        syncTransportLoopRef.current = (forceFlush = false) => {
+          clearTransportLoops();
+
+          if (!shellIdRef.current) {
+            return;
+          }
+
+          pollTimerRef.current = window.setInterval(() => {
+            void flushRemoteOutput();
+          }, isActiveRef.current ? 55 : 240);
+
+          if (isActiveRef.current) {
+            inputFlushTimerRef.current = window.setInterval(() => {
+              void flushInputBuffer();
+            }, 24);
+          }
+
+          if (forceFlush) {
+            void flushRemoteOutput();
+          }
+        };
+
         try {
           const result = await desktopApi.bootstrapTerminal(session.id, terminal.cols, terminal.rows);
 
@@ -256,10 +313,11 @@ export function TerminalViewport({ session, tabId }: TerminalViewportProps) {
           }
 
           shellIdRef.current = result.shellId;
+          setTabShellId(tabId, result.shellId);
           terminal.writeln('');
           terminal.writeln(`${colors.success}${result.banner}${colors.reset}`);
-          terminal.writeln(`${colors.success}Estado de conexión: en línea${colors.reset}`);
-          terminal.writeln(`${colors.muted}Tip: usa comandos normales como ls, pwd, cd o clear.${colors.reset}`);
+          terminal.writeln(`${colors.success}Estado de conexion: en linea${colors.reset}`);
+          {/*terminal.writeln(`${colors.muted}Tip: usa comandos normales como ls, pwd, cd o clear.${colors.reset}`);*/}
           terminal.writeln('');
           setTabConnection(tabId, result.connected);
 
@@ -275,17 +333,13 @@ export function TerminalViewport({ session, tabId }: TerminalViewportProps) {
             inputBufferRef.current += input;
           });
 
-          await flushRemoteOutput();
-
-          pollTimerRef.current = window.setInterval(() => {
-            void flushRemoteOutput();
-          }, 45);
-
-          inputFlushTimerRef.current = window.setInterval(() => {
-            void flushInputBuffer();
-          }, 24);
+          syncTransportLoopRef.current?.(true);
 
           resizeObserverRef.current = new ResizeObserver(() => {
+            if (!isActiveRef.current) {
+              return;
+            }
+
             fitAddon.fit();
 
             if (shellIdRef.current) {
@@ -301,7 +355,10 @@ export function TerminalViewport({ session, tabId }: TerminalViewportProps) {
             );
             terminal.write('$ ');
             setTabConnection(tabId, false);
+            setTabShellId(tabId, null);
           }
+        } finally {
+          openingRef.current = false;
         }
       }
     );
@@ -310,7 +367,13 @@ export function TerminalViewport({ session, tabId }: TerminalViewportProps) {
       disposed = true;
       cleanup();
     };
-  }, [session.host, session.id, session.name, session.port, session.username, setTabConnection, tabId]);
+  }, [session.id, setTabConnection, setTabShellId, tabId]);
 
-  return <div className={styles.viewport} ref={containerRef} />;
+  return (
+    <div
+      className={`${styles.viewport} ${isActive ? styles.viewportActive : styles.viewportHidden}`}
+      ref={containerRef}
+      aria-hidden={!isActive}
+    />
+  );
 }

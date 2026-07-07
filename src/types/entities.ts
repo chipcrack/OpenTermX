@@ -77,6 +77,7 @@ export interface TerminalTab {
   sessionId: string;
   title: string;
   connected: boolean;
+  shellId: string | null;
 }
 
 export interface SftpEntry {

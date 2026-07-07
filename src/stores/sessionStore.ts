@@ -33,6 +33,7 @@ interface SessionStore {
   activateTab: (tabId: string) => void;
   closeTab: (tabId: string) => void;
   setTabConnection: (tabId: string, connected: boolean) => void;
+  setTabShellId: (tabId: string, shellId: string | null) => void;
   toggleSftpPanel: () => void;
   toggleTunnelsPanel: () => void;
   openCreateSession: () => void;
@@ -53,13 +54,43 @@ interface SessionStore {
   clearError: () => void;
 }
 
+function createTabId(sessionId: string) {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return `tab-${sessionId}-${crypto.randomUUID()}`;
+  }
+
+  return `tab-${sessionId}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
 function buildTab(session: Session): TerminalTab {
   return {
-    id: `tab-${session.id}`,
+    id: createTabId(session.id),
     sessionId: session.id,
     title: session.name,
-    connected: false
+    connected: false,
+    shellId: null
   };
+}
+
+function withNormalizedTabTitles(tabs: TerminalTab[], sessions: Session[]) {
+  const counts = new Map<string, number>();
+  const totals = tabs.reduce<Map<string, number>>((map, tab) => {
+    map.set(tab.sessionId, (map.get(tab.sessionId) ?? 0) + 1);
+    return map;
+  }, new Map());
+
+  return tabs.map((tab) => {
+    const session = sessions.find((item) => item.id === tab.sessionId);
+    const baseTitle = session?.name ?? tab.title;
+    const nextIndex = (counts.get(tab.sessionId) ?? 0) + 1;
+    counts.set(tab.sessionId, nextIndex);
+    const needsSuffix = (totals.get(tab.sessionId) ?? 0) > 1;
+
+    return {
+      ...tab,
+      title: needsSuffix ? `${baseTitle} (${nextIndex})` : baseTitle
+    };
+  });
 }
 
 export const useSessionStore = create<SessionStore>((set, get) => ({
@@ -101,13 +132,7 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
         const existingTabs = state.terminalTabs.filter((tab) =>
           sessions.some((session) => session.id === tab.sessionId)
         );
-        const nextTabs =
-          existingTabs.length > 0
-            ? existingTabs.map((tab) => {
-                const matchingSession = sessions.find((session) => session.id === tab.sessionId);
-                return matchingSession ? { ...tab, title: matchingSession.name } : tab;
-              })
-            : [];
+        const nextTabs = existingTabs.length > 0 ? withNormalizedTabTitles(existingTabs, sessions) : [];
 
         const activeTabId =
           nextTabs.find((tab) => tab.id === state.activeTabId)?.id ?? nextTabs[0]?.id ?? null;
@@ -134,20 +159,10 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
     }
   },
   selectSession: (sessionId) => {
-    const { sessions, terminalTabs } = get();
+    const { sessions } = get();
     const session = sessions.find((item) => item.id === sessionId);
 
     if (!session) {
-      return;
-    }
-
-    const existingTab = terminalTabs.find((tab) => tab.sessionId === sessionId);
-
-    if (existingTab) {
-      set({
-        activeSessionId: sessionId,
-        activeTabId: existingTab.id
-      });
       return;
     }
 
@@ -155,7 +170,7 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
 
     set((state) => ({
       activeSessionId: sessionId,
-      terminalTabs: [...state.terminalTabs, newTab],
+      terminalTabs: withNormalizedTabTitles([...state.terminalTabs, newTab], state.sessions),
       activeTabId: newTab.id
     }));
   },
@@ -172,11 +187,16 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
     });
   },
   closeTab: (tabId) => {
+    const closingTab = get().terminalTabs.find((tab) => tab.id === tabId);
+    if (closingTab?.shellId) {
+      void desktopApi.closeTerminal(closingTab.shellId);
+    }
+
     const nextTabs = get().terminalTabs.filter((tab) => tab.id !== tabId);
     const nextActiveTab = nextTabs.length > 0 ? nextTabs[nextTabs.length - 1] : null;
 
     set({
-      terminalTabs: nextTabs,
+      terminalTabs: withNormalizedTabTitles(nextTabs, get().sessions),
       activeTabId: nextActiveTab?.id ?? null,
       activeSessionId: nextActiveTab?.sessionId ?? null
     });
@@ -184,6 +204,11 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
   setTabConnection: (tabId, connected) => {
     set((state) => ({
       terminalTabs: state.terminalTabs.map((tab) => (tab.id === tabId ? { ...tab, connected } : tab))
+    }));
+  },
+  setTabShellId: (tabId, shellId) => {
+    set((state) => ({
+      terminalTabs: state.terminalTabs.map((tab) => (tab.id === tabId ? { ...tab, shellId } : tab))
     }));
   },
   toggleSftpPanel: () => {
@@ -236,11 +261,9 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
             )
           : [normalizedSession, ...state.sessions];
 
-        const terminalTabs = state.terminalTabs.some((tab) => tab.sessionId === normalizedSession.id)
-          ? state.terminalTabs.map((tab) =>
-              tab.sessionId === normalizedSession.id ? { ...tab, title: normalizedSession.name } : tab
-            )
-          : [...state.terminalTabs, buildTab(normalizedSession)];
+        const terminalTabs = existing
+          ? withNormalizedTabTitles(state.terminalTabs, sessions)
+          : withNormalizedTabTitles([...state.terminalTabs, buildTab(normalizedSession)], sessions);
 
         const nextActiveTab = terminalTabs.find((tab) => tab.sessionId === normalizedSession.id) ?? null;
 
@@ -273,13 +296,19 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
       set((state) => {
         const sessions = state.sessions.filter((session) => session.id !== sessionId);
         const tunnels = state.tunnels.filter((tunnel) => tunnel.sessionId !== sessionId);
+        const tabsToClose = state.terminalTabs.filter((tab) => tab.sessionId === sessionId);
+        tabsToClose.forEach((tab) => {
+          if (tab.shellId) {
+            void desktopApi.closeTerminal(tab.shellId);
+          }
+        });
         const filteredTabs = state.terminalTabs.filter((tab) => tab.sessionId !== sessionId);
         const nextActiveTab = filteredTabs[0] ?? null;
 
         return {
           sessions,
           tunnels,
-          terminalTabs: filteredTabs,
+          terminalTabs: withNormalizedTabTitles(filteredTabs, sessions),
           activeTabId: nextActiveTab?.id ?? null,
           activeSessionId: nextActiveTab?.sessionId ?? null,
           loading: false,

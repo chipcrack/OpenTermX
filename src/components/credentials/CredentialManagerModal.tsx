@@ -25,11 +25,14 @@ export function CredentialManagerModal() {
   const editingCredential =
     credentials.find((credential) => credential.id === editingCredentialId) ?? null;
   const [draft, setDraft] = useState<CredentialDraft>(defaultDraft);
+  const [showPassword, setShowPassword] = useState(false);
 
   useEffect(() => {
     if (!credentialFormOpen) {
       return;
     }
+
+    setShowPassword(false);
 
     if (editingCredential) {
       setDraft({
@@ -118,14 +121,39 @@ export function CredentialManagerModal() {
 
           <label className={styles.field}>
             <span>Contrasena</span>
-            <input
-              required
-              type="password"
-              value={draft.password}
-              onChange={(event) =>
-                setDraft((state) => ({ ...state, password: event.target.value }))
-              }
-            />
+            <div className={styles.passwordInputWrap}>
+              <input
+                required
+                type={showPassword ? 'text' : 'password'}
+                value={draft.password}
+                onChange={(event) =>
+                  setDraft((state) => ({ ...state, password: event.target.value }))
+                }
+              />
+              <button
+                type="button"
+                className={styles.passwordToggle}
+                aria-label={showPassword ? 'Ocultar contrasena' : 'Mostrar contrasena'}
+                title={showPassword ? 'Ocultar contrasena' : 'Mostrar contrasena'}
+                onClick={() => setShowPassword((current) => !current)}
+              >
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  {showPassword ? (
+                    <>
+                      <path d="M3 4.5 19.5 21" />
+                      <path d="M10.6 6.3A10.8 10.8 0 0 1 12 6c5.4 0 9 6 9 6a16.7 16.7 0 0 1-3.3 3.8" />
+                      <path d="M6.7 8A16.6 16.6 0 0 0 3 12s3.6 6 9 6c1.4 0 2.6-.3 3.7-.8" />
+                      <path d="M9.9 9.8A3 3 0 0 0 12 15a3 3 0 0 0 2-.8" />
+                    </>
+                  ) : (
+                    <>
+                      <path d="M2.5 12S6 6 12 6s9.5 6 9.5 6-3.5 6-9.5 6S2.5 12 2.5 12Z" />
+                      <circle cx="12" cy="12" r="3" />
+                    </>
+                  )}
+                </svg>
+              </button>
+            </div>
           </label>
 
           <label className={styles.field}>

@@ -1,6 +1,7 @@
 import appIcon from '../../assets/app-icon.png';
 import { useSessionStore } from '../../stores/sessionStore';
 import { useUiStore } from '../../stores/uiStore';
+import { getEnvironmentAppearance, getSessionAccent, withAlpha } from '../../utils/sessionAppearance';
 
 export function AppTopbar() {
   const theme = useUiStore((state) => state.theme);
@@ -15,6 +16,8 @@ export function AppTopbar() {
   const toggleTunnelsPanel = useSessionStore((state) => state.toggleTunnelsPanel);
 
   const activeSession = sessions.find((session) => session.id === activeSessionId) ?? null;
+  const activeAccent = activeSession ? getSessionAccent(activeSession) : null;
+  const activeBadge = activeSession ? getEnvironmentAppearance(activeSession.environment).badge : 'CTX';
 
   return (
     <div className="otx-panel flex flex-col gap-3 px-3 py-3 lg:flex-row lg:items-center lg:justify-between">
@@ -56,9 +59,23 @@ export function AppTopbar() {
       </nav>
 
       <div className="flex flex-wrap items-center gap-1.5">
-        <span className="otx-chip">{activeSession ? activeSession.environment : 'sin contexto'}</span>
+        <span
+          className="otx-chip"
+          style={
+            activeAccent
+              ? {
+                  borderColor: withAlpha(activeAccent, 0.22),
+                  background: withAlpha(activeAccent, 0.12),
+                  color: activeAccent
+                }
+              : undefined
+          }
+        >
+          {activeBadge}
+          <span className="text-[var(--otx-text-soft)]">{activeSession ? activeSession.environment : 'No conection'}</span>
+        </span>
         <button type="button" className="otx-button-secondary min-w-[5.75rem]" onClick={toggleTheme}>
-          {theme === 'dark' ? 'Modo oscuro' : 'Modo claro'}
+          {theme === 'dark' ? 'Tema oscuro' : 'Tema claro'}
         </button>
       </div>
     </div>

@@ -3,46 +3,6 @@
 @tailwind utilities;
 
 :root {
-  color-scheme: dark;
-  --otx-bg: #0b1120;
-  --otx-surface: rgba(10, 17, 33, 0.86);
-  --otx-panel: rgba(15, 23, 42, 0.9);
-  --otx-panel-strong: #111c34;
-  --otx-input: rgba(30, 41, 59, 0.88);
-  --otx-border: rgba(148, 163, 184, 0.16);
-  --otx-text: #e5eefb;
-  --otx-text-soft: #c2d0ea;
-  --otx-muted: #8ea2c5;
-  --otx-brand: #3b82f6;
-  --otx-brand-strong: #2563eb;
-  --otx-brand-soft: rgba(59, 130, 246, 0.18);
-  --otx-overlay: rgba(7, 12, 24, 0.72);
-  --otx-shadow: rgba(15, 23, 42, 0.3);
-  --otx-terminal: #08101f;
-  --otx-success: #22c55e;
-  --otx-warning: #f59e0b;
-  --otx-danger: #f87171;
-  --font-sans: 'Segoe UI', 'Trebuchet MS', ui-sans-serif, system-ui, sans-serif;
-  --font-mono: 'JetBrains Mono', 'Cascadia Code', ui-monospace, monospace;
-  --color-bg: var(--otx-bg);
-  --color-surface: var(--otx-surface);
-  --color-panel: var(--otx-panel-strong);
-  --color-panel-elevated: var(--otx-panel);
-  --color-input: var(--otx-input);
-  --color-border: var(--otx-border);
-  --color-text: var(--otx-text);
-  --color-text-soft: var(--otx-text-soft);
-  --color-muted: var(--otx-muted);
-  --color-primary: var(--otx-brand);
-  --color-primary-strong: var(--otx-brand-strong);
-  --color-accent: rgba(59, 130, 246, 0.68);
-  --color-accent-soft: var(--otx-brand-soft);
-  --color-overlay: var(--otx-overlay);
-  --color-shadow: var(--otx-shadow);
-  --color-terminal-bg: var(--otx-terminal);
-}
-
-:root[data-theme='light'] {
   color-scheme: light;
   --otx-bg: #f4f7fb;
   --otx-surface: rgba(255, 255, 255, 0.92);
@@ -62,6 +22,47 @@
   --otx-success: #16a34a;
   --otx-warning: #d97706;
   --otx-danger: #dc2626;
+  --font-sans: 'Segoe UI', 'Trebuchet MS', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Cascadia Code', ui-monospace, monospace;
+  --color-bg: var(--otx-bg);
+  --color-surface: var(--otx-surface);
+  --color-panel: var(--otx-panel-strong);
+  --color-panel-elevated: var(--otx-panel);
+  --color-input: var(--otx-input);
+  --color-border: var(--otx-border);
+  --color-text: var(--otx-text);
+  --color-text-soft: var(--otx-text-soft);
+  --color-muted: var(--otx-muted);
+  --color-primary: var(--otx-brand);
+  --color-primary-strong: var(--otx-brand-strong);
+  --color-accent: rgba(37, 99, 235, 0.68);
+  --color-accent-soft: var(--otx-brand-soft);
+  --color-overlay: var(--otx-overlay);
+  --color-shadow: var(--otx-shadow);
+  --color-terminal-bg: var(--otx-terminal);
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --otx-bg: #0b1120;
+  --otx-surface: rgba(10, 17, 33, 0.86);
+  --otx-panel: rgba(15, 23, 42, 0.9);
+  --otx-panel-strong: #111c34;
+  --otx-input: rgba(30, 41, 59, 0.88);
+  --otx-border: rgba(148, 163, 184, 0.16);
+  --otx-text: #e5eefb;
+  --otx-text-soft: #c2d0ea;
+  --otx-muted: #8ea2c5;
+  --otx-brand: #3b82f6;
+  --otx-brand-strong: #2563eb;
+  --otx-brand-soft: rgba(59, 130, 246, 0.18);
+  --otx-overlay: rgba(7, 12, 24, 0.72);
+  --otx-shadow: rgba(15, 23, 42, 0.3);
+  --otx-terminal: #08101f;
+  --otx-success: #22c55e;
+  --otx-warning: #f59e0b;
+  --otx-danger: #f87171;
+  --color-accent: rgba(59, 130, 246, 0.68);
 }
 
 @layer base {
@@ -172,7 +173,7 @@
   .otx-button-primary {
     border-color: rgba(59, 130, 246, 0.28);
     background: linear-gradient(135deg, rgba(59, 130, 246, 0.22), rgba(37, 99, 235, 0.32));
-    color: #eff6ff;
+    color: #137dff;
   }
 
   .otx-button-secondary {

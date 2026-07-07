@@ -69,8 +69,24 @@ export function TerminalWorkspace() {
 
       <div className="flex min-h-[21rem] flex-[0_1_auto] flex-col overflow-hidden rounded-[22px] border border-[var(--otx-border)] bg-[var(--otx-terminal)] shadow-shell max-lg:max-h-[58vh] lg:max-h-[62vh] xl:max-h-[68vh]">
         <TerminalTabs />
-        {activeTabId && activeSession ? (
-          <TerminalViewport session={activeSession} tabId={activeTab?.id ?? activeTabId} />
+        {terminalTabs.length > 0 ? (
+          <div className="relative flex-1 overflow-hidden">
+            {terminalTabs.map((tab) => {
+              const session = sessions.find((item) => item.id === tab.sessionId);
+              if (!session) {
+                return null;
+              }
+
+              return (
+                <TerminalViewport
+                  key={tab.id}
+                  session={session}
+                  tabId={tab.id}
+                  isActive={tab.id === activeTabId}
+                />
+              );
+            })}
+          </div>
         ) : (
           <div className="grid flex-1 place-items-center px-6 py-10 text-center text-[var(--otx-muted)]">
             <div className="max-w-md">

@@ -9,11 +9,11 @@ interface UiStore {
 
 function readStoredTheme(): ThemeMode {
   if (typeof window === 'undefined') {
-    return 'dark';
+    return 'light';
   }
 
   const storedTheme = window.localStorage.getItem('opentermx-theme');
-  return storedTheme === 'light' ? 'light' : 'dark';
+  return storedTheme === 'dark' ? 'dark' : 'light';
 }
 
 export const useUiStore = create<UiStore>((set, get) => ({

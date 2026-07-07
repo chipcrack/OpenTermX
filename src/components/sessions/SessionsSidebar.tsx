@@ -1,6 +1,11 @@
 import { useMemo, useState } from 'react';
 import { useSessionStore } from '../../stores/sessionStore';
 import type { Session } from '../../types/entities';
+import {
+  getEnvironmentAppearance,
+  getSessionAccent,
+  withAlpha
+} from '../../utils/sessionAppearance';
 
 function groupSessions(sessions: Session[]) {
   return sessions.reduce<Record<string, Session[]>>((groups, session) => {
@@ -118,37 +123,69 @@ export function SessionsSidebar() {
               </button>
 
               {expanded ? (
-                <div className="ml-5 mt-0.5 flex flex-col">
-                  {items.map((session) => (
-                    <div
-                      key={session.id}
-                      className={`group flex items-center gap-2 rounded-md px-1.5 py-1 ${
-                        activeSessionId === session.id
-                          ? 'border border-[var(--otx-border)] bg-[var(--otx-brand-soft)]'
-                          : 'border border-transparent hover:bg-[var(--otx-brand-soft)]'
-                      }`}
-                    >
-                      <button
-                        type="button"
-                        className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden border-0 bg-transparent p-0 text-left"
-                        onClick={() => selectSession(session.id)}
-                        title={getSessionLabel(session)}
-                      >
-                        <span className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-sm border border-amber-500/20 bg-amber-400/12 text-[9px] text-amber-600 dark:text-amber-300">
-                          K
-                        </span>
-                        <span className="truncate text-[11px] text-[var(--otx-text)]">{getSessionLabel(session)}</span>
-                      </button>
+                <div className="ml-2 mt-0. flex flex-col">
+                  {items.map((session) => {
+                    const appearance = getEnvironmentAppearance(session.environment);
+                    const accent = getSessionAccent(session);
+                    const isActive = activeSessionId === session.id;
 
-                      <button
-                        type="button"
-                        className="shrink-0 border-0 bg-transparent p-0 text-[10px] text-[var(--otx-muted)] opacity-0 transition group-hover:opacity-100 hover:text-[var(--otx-text)]"
-                        onClick={() => openEditSession(session.id)}
+                    return (
+                      <div
+                        key={session.id}
+                        className="group flex items-center gap-2 rounded-md border px-1.5 py-1 transition hover:bg-[var(--otx-brand-soft)]"
+                        style={{
+                          borderColor: isActive ? withAlpha(accent, 0.34) : 'transparent',
+                          background: isActive
+                            ? `linear-gradient(90deg, ${withAlpha(accent, 0.18)}, ${withAlpha(accent, 0.07)})`
+                            : undefined
+                        }}
                       >
-                        Edit
-                      </button>
-                    </div>
-                  ))}
+                        <button
+                          type="button"
+                          className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden border-0 bg-transparent p-0 text-left hover:opacity-100"
+                          onClick={() => selectSession(session.id)}
+                          title={`${appearance.label} - ${getSessionLabel(session)}`}
+                        >
+                          <span
+                            className="block h-6 w-1 shrink-0 rounded-full"
+                            style={{
+                              background: accent,
+                              boxShadow: isActive ? `0 0 12px ${withAlpha(accent, 0.42)}` : 'none'
+                            }}
+                          />
+                          {/*<span
+                            className="inline-flex h-4 min-w-[2rem] shrink-0 items-center justify-center rounded-md border px-1 text-[9px] font-semibold tracking-[0.08em]"
+                            style={{
+                              borderColor: withAlpha(accent, 0.28),
+                              background: withAlpha(accent, 0.12),
+                              color: accent
+                            }}
+                          >
+                            {appearance.badge}
+                          </span>*/}
+                          <span
+                            className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-sm text-[9px] font-semibold"
+                            style={{
+                              color: accent,
+                              background: withAlpha(accent, 0.12)
+                            }}
+                            aria-hidden="true"
+                          >
+                            {appearance.glyph}
+                          </span>
+                          <span className="truncate text-[11px] text-[var(--otx-text)]">{getSessionLabel(session)}</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          className="shrink-0 border-0 bg-transparent p-0 text-[10px] text-[var(--otx-muted)] opacity-0 transition group-hover:opacity-100 hover:text-[var(--otx-text)]"
+                          onClick={() => openEditSession(session.id)}
+                        >
+                          Edit
+                        </button>
+                      </div>
+                    );
+                  })}
                 </div>
               ) : null}
             </section>

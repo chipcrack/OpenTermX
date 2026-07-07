@@ -1,10 +1,22 @@
 .viewport {
+  position: absolute;
+  inset: 0;
   display: flex;
-  flex: 1;
-  min-height: 0;
   overflow: hidden;
   padding: 0.45rem 0.55rem 0.55rem;
   background: var(--color-terminal-bg);
+}
+
+.viewportActive {
+  opacity: 1;
+  pointer-events: auto;
+  z-index: 1;
+}
+
+.viewportHidden {
+  opacity: 0;
+  pointer-events: none;
+  z-index: 0;
 }
 
 .viewport :global(.xterm) {
