@@ -22,6 +22,7 @@ let sftpMemory = Object.fromEntries(
     entries.map((entry) => ({ ...entry }))
   ])
 ) as Record<string, SftpEntry[]>;
+const sftpFileMemory = new Map<string, Uint8Array>();
 const shellMemory = new Map<string, { sessionId: string; buffer: string }>();
 
 function createId(prefix: string) {
@@ -53,6 +54,10 @@ function getParentDirectory(path: string) {
 function joinRemotePath(base: string, name: string) {
   const normalizedBase = normalizeRemotePath(base);
   return normalizeRemotePath(`${normalizedBase}/${name}`);
+}
+
+function getSftpFileKey(sessionId: string, path: string) {
+  return `${sessionId}:${normalizeRemotePath(path)}`;
 }
 
 function buildSession(input: SessionDraft): Session {
@@ -330,6 +335,26 @@ export const desktopApi = {
     const nextFrom = normalizeRemotePath(fromPath);
     const nextTo = normalizeRemotePath(toPath);
 
+    const movedFiles = new Map<string, Uint8Array>();
+    [...sftpFileMemory.entries()].forEach(([key, value]) => {
+      const prefix = `${sessionId}:`;
+      if (!key.startsWith(prefix)) {
+        return;
+      }
+
+      const currentPath = key.slice(prefix.length);
+      if (currentPath === nextFrom) {
+        movedFiles.set(nextTo, value);
+        sftpFileMemory.delete(key);
+        return;
+      }
+
+      if (currentPath.startsWith(`${nextFrom}/`)) {
+        movedFiles.set(currentPath.replace(nextFrom, nextTo), value);
+        sftpFileMemory.delete(key);
+      }
+    });
+
     sftpMemory[sessionId] = entries.map((entry) => {
       if (entry.path === nextFrom) {
         return {
@@ -353,6 +378,10 @@ export const desktopApi = {
       return entry;
     });
 
+    movedFiles.forEach((value, movedPath) => {
+      sftpFileMemory.set(getSftpFileKey(sessionId, movedPath), value);
+    });
+
     return Promise.resolve();
   },
   async deleteEntry(sessionId: string, path: string, entryType: SftpEntry['type']) {
@@ -373,6 +402,66 @@ export const desktopApi = {
       return true;
     });
 
+    if (entryType === 'file') {
+      sftpFileMemory.delete(getSftpFileKey(sessionId, normalizedPath));
+    } else {
+      [...sftpFileMemory.keys()].forEach((key) => {
+        if (key === getSftpFileKey(sessionId, normalizedPath) || key.startsWith(`${sessionId}:${normalizedPath}/`)) {
+          sftpFileMemory.delete(key);
+        }
+      });
+    }
+
     return Promise.resolve();
+  },
+  async uploadFile(sessionId: string, remotePath: string, contents: Uint8Array) {
+    if (isTauriRuntime()) {
+      return invoke<void>('upload_file', {
+        sessionId,
+        remotePath,
+        contents: Array.from(contents)
+      });
+    }
+
+    const normalizedPath = normalizeRemotePath(remotePath);
+    const entryName = normalizedPath.split('/').filter(Boolean).pop();
+    if (!entryName) {
+      throw new Error('Ruta invalida para subir archivo');
+    }
+
+    const nextEntry: SftpEntry = {
+      id: normalizedPath,
+      name: entryName,
+      path: normalizedPath,
+      type: 'file',
+      size: `${contents.byteLength} B`,
+      modifiedAt: new Date().toISOString().slice(0, 16).replace('T', ' ')
+    };
+
+    const currentEntries = sftpMemory[sessionId] ?? [];
+    const withoutExisting = currentEntries.filter((entry) => entry.path !== normalizedPath);
+    sftpMemory[sessionId] = [nextEntry, ...withoutExisting];
+    sftpFileMemory.set(getSftpFileKey(sessionId, normalizedPath), new Uint8Array(contents));
+    return Promise.resolve();
+  },
+  async downloadFile(sessionId: string, path: string) {
+    if (isTauriRuntime()) {
+      const payload = await invoke<number[]>('download_file', { sessionId, path });
+      return Uint8Array.from(payload);
+    }
+
+    const normalizedPath = normalizeRemotePath(path);
+    const cached = sftpFileMemory.get(getSftpFileKey(sessionId, normalizedPath));
+    if (cached) {
+      return Promise.resolve(new Uint8Array(cached));
+    }
+
+    const entry = (sftpMemory[sessionId] ?? []).find((item) => item.path === normalizedPath);
+    if (!entry || entry.type !== 'file') {
+      throw new Error('No se encontro el archivo remoto');
+    }
+
+    const fallback = new TextEncoder().encode(`Mock file for ${entry.name}\n`);
+    return Promise.resolve(fallback);
   }
 };

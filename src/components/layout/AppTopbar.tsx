@@ -1,7 +1,6 @@
+import appIcon from '../../assets/app-icon.png';
 import { useSessionStore } from '../../stores/sessionStore';
 import { useUiStore } from '../../stores/uiStore';
-import appIcon from '../../assets/app-icon.png';
-import styles from './AppTopbar.module.css';
 
 export function AppTopbar() {
   const theme = useUiStore((state) => state.theme);
@@ -18,42 +17,49 @@ export function AppTopbar() {
   const activeSession = sessions.find((session) => session.id === activeSessionId) ?? null;
 
   return (
-    <div className={styles.bar}>
-      <div className={styles.brand}>
-        <img src={appIcon} alt="OpenTermX" className={styles.brandMark} />
-        <div>
-          <strong className={styles.brandTitle}>OpenTermX</strong>
-          <span className={styles.brandSubtitle}>
-            {activeSession ? `${activeSession.username}@${activeSession.host}` : 'Gestión visual de servidores'}
+    <div className="otx-panel flex flex-col gap-3 px-3 py-3 lg:flex-row lg:items-center lg:justify-between">
+      <div className="flex min-w-0 items-center gap-2.5">
+        <img
+          src={appIcon}
+          alt="OpenTermX"
+          className="h-10 w-10 rounded-xl border border-white/10 object-cover shadow-panel"
+        />
+        <div className="min-w-0">
+          <p className="otx-kicker m-0"></p>
+          <div className="flex min-w-0 items-center gap-2">
+            <strong className="truncate text-sm font-semibold">OpenTermX</strong>
+            <span className="hidden rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[10px] font-medium text-[var(--otx-text-soft)] md:inline-flex">
+              {sessions.length} sesiones
+            </span>
+          </div>
+          <span className="block truncate text-xs text-[var(--otx-muted)]">
+            {activeSession
+              ? `${activeSession.username}@${activeSession.host}`
+              : 'Workspace operativo para servidores'}
           </span>
         </div>
       </div>
 
-      <nav className={styles.actions} aria-label="Acciones principales">
-        <button type="button" className={styles.primaryButton} onClick={openCreateSession}>
-          Nueva sesión
+      <nav className="flex flex-wrap items-center gap-1.5" aria-label="Acciones principales">
+        <button type="button" className="otx-button-primary" onClick={openCreateSession}>
+          Nueva sesion
         </button>
-        <button type="button" className={styles.secondaryButton} onClick={openCreateCredential}>
+        <button type="button" className="otx-button-secondary" onClick={openCreateCredential}>
           Credenciales
         </button>
-        <button type="button" className={styles.secondaryButton} onClick={toggleSftpPanel}>
+        <button type="button" className="otx-button-secondary" onClick={toggleSftpPanel}>
           {sftpVisible ? 'Ocultar SFTP' : 'Mostrar SFTP'}
         </button>
-        <button type="button" className={styles.secondaryButton} onClick={toggleTunnelsPanel}>
-          {tunnelsVisible ? 'Ocultar túneles' : 'Mostrar túneles'}
-        </button>
+        {/* <button type="button" className="otx-button-secondary" onClick={toggleTunnelsPanel}>
+          {tunnelsVisible ? 'Ocultar tuneles' : 'Mostrar tuneles'}
+        </button> */}
       </nav>
 
-      <div className={styles.utilities}>
-        <span className={styles.counter}>{sessions.length} sesiones</span>
-
-        <label className={styles.themeSwitch}>
-          <input type="checkbox" checked={theme === 'light'} onChange={toggleTheme} />
-          <span className={styles.track} aria-hidden="true">
-            <span className={styles.thumb} />
-          </span>
-          <span className={styles.themeLabel}>{theme === 'dark' ? 'Oscuro' : 'Claro'}</span>
-        </label>
+      <div className="flex flex-wrap items-center gap-1.5">
+        <span className="otx-chip">{activeSession ? activeSession.environment : 'sin contexto'}</span>
+        <button type="button" className="otx-button-secondary min-w-[5.75rem]" onClick={toggleTheme}>
+          {theme === 'dark' ? 'Modo oscuro' : 'Modo claro'}
+        </button>
       </div>
     </div>
   );

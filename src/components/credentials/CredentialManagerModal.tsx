@@ -52,7 +52,7 @@ export function CredentialManagerModal() {
   return (
     <Modal
       title="Credenciales"
-      subtitle="Administra usuarios y contraseñas reutilizables para tus sesiones SSH."
+      subtitle="Administra usuarios y contrasenas reutilizables para tus sesiones SSH."
       onClose={closeCredentialForm}
     >
       <div className={styles.layout}>
@@ -74,11 +74,18 @@ export function CredentialManagerModal() {
                 }`}
                 onClick={() => openEditCredential(credential.id)}
               >
-                <strong>{credential.label}</strong>
-                <span>{credential.username}</span>
-                <small>{credential.note || 'Sin nota'}</small>
+                <span className={styles.credentialKey}>K</span>
+                <span className={styles.credentialMain}>
+                  <strong>{credential.label}</strong>
+                  <small>{credential.note || 'Sin nota'}</small>
+                </span>
+                <span className={styles.credentialUser}>{credential.username}</span>
               </button>
             ))}
+
+            {!credentials.length ? (
+              <div className={styles.emptyState}>No hay credenciales guardadas.</div>
+            ) : null}
           </div>
         </section>
 
@@ -110,7 +117,7 @@ export function CredentialManagerModal() {
           </label>
 
           <label className={styles.field}>
-            <span>Contraseña</span>
+            <span>Contrasena</span>
             <input
               required
               type="password"
@@ -147,7 +154,7 @@ export function CredentialManagerModal() {
                 Cerrar
               </button>
               <button type="submit" className={styles.primaryButton} disabled={loading}>
-                {loading ? 'Guardando…' : 'Guardar credencial'}
+                {loading ? 'Guardando...' : 'Guardar credencial'}
               </button>
             </div>
           </div>

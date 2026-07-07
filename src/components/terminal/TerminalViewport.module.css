@@ -2,15 +2,15 @@
   display: flex;
   flex: 1;
   min-height: 0;
-  height: 100%;
   overflow: hidden;
-  padding: 0.65rem;
+  padding: 0.45rem 0.55rem 0.55rem;
   background: var(--color-terminal-bg);
 }
 
 .viewport :global(.xterm) {
   flex: 1;
-  height: 100%;
+  min-height: 18rem;
+  height: auto;
   color: var(--color-text);
   background: var(--color-terminal-bg);
   border-radius: 0.85rem;

@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { CredentialManagerModal } from '../components/credentials/CredentialManagerModal';
 import { AppShell } from '../components/layout/AppShell';
 import { AppTopbar } from '../components/layout/AppTopbar';
@@ -7,7 +8,6 @@ import { SftpPanel } from '../components/sftp/SftpPanel';
 import { TunnelFormModal } from '../components/terminal/TunnelFormModal';
 import { TerminalWorkspace } from '../components/terminal/TerminalWorkspace';
 import { useSessionStore } from '../stores/sessionStore';
-import { useEffect } from 'react';
 
 export function WorkspacePage() {
   const sftpVisible = useSessionStore((state) => state.sftpVisible);
@@ -26,34 +26,15 @@ export function WorkspacePage() {
   return (
     <>
       {error ? (
-        <div
-          style={{
-            position: 'fixed',
-            top: 16,
-            right: 16,
-            zIndex: 60,
-            border: '1px solid rgba(248, 113, 113, 0.35)',
-            borderRadius: 14,
-            background: 'rgba(127, 29, 29, 0.92)',
-            color: '#fee2e2',
-            padding: '0.9rem 1rem',
-            boxShadow: '0 12px 30px rgba(2, 6, 23, 0.25)'
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+        <div className="fixed right-4 top-4 z-[60] max-w-md rounded-2xl border border-red-400/30 bg-red-950/90 px-4 py-3 text-red-50 shadow-2xl shadow-slate-950/20 backdrop-blur">
+          <div className="flex items-center gap-3">
             <span>{error}</span>
             <button
               type="button"
               onClick={clearError}
-              style={{
-                border: '1px solid rgba(255,255,255,0.2)',
-                borderRadius: 999,
-                background: 'transparent',
-                color: 'inherit',
-                cursor: 'pointer'
-              }}
+              className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-white/20 bg-transparent text-inherit"
             >
-              ×
+              x
             </button>
           </div>
         </div>
@@ -71,18 +52,11 @@ export function WorkspacePage() {
       <TunnelFormModal />
 
       {loading && !initialized ? (
-        <div
-          style={{
-            position: 'fixed',
-            inset: 0,
-            zIndex: 40,
-            display: 'grid',
-            placeItems: 'center',
-            background: 'rgba(2, 6, 23, 0.6)',
-            color: '#e2e8f0'
-          }}
-        >
-          <p>Cargando workspace…</p>
+        <div className="fixed inset-0 z-40 grid place-items-center bg-slate-950/55 text-slate-100 backdrop-blur-sm">
+          <div className="otx-panel flex items-center gap-3 px-5 py-4">
+            <span className="h-2.5 w-2.5 animate-pulse rounded-full bg-sky-400" />
+            <p className="m-0 text-sm font-medium">Cargando workspace...</p>
+          </div>
         </div>
       ) : null}
     </>

@@ -4,7 +4,6 @@ import type { Session } from '../../types/entities';
 import { TerminalTabs } from './TerminalTabs';
 import { TunnelManager } from './TunnelManager';
 import { TerminalViewport } from './TerminalViewport';
-import styles from './TerminalWorkspace.module.css';
 
 export function TerminalWorkspace() {
   const sessions = useSessionStore((state) => state.sessions);
@@ -29,50 +28,57 @@ export function TerminalWorkspace() {
   const statusLabel = activeTab?.connected ? 'SSH activo' : activeSession ? 'Pendiente' : 'Sin iniciar';
 
   return (
-    <section className={styles.workspace}>
-      <header className={styles.toolbar}>
+    <section className="flex h-full flex-col gap-3 overflow-y-auto p-3">
+      <header className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
         <div>
-          <p className={styles.eyebrow}>Terminal</p>
-          <h2 className={styles.title}>{activeSession?.name ?? 'Sin sesión activa'}</h2>
-          <span className={styles.subtitle}>
+          <p className="otx-kicker m-0">Workspace</p>
+          <h2 className="mt-1.5 text-lg font-semibold">{activeSession?.name ?? 'Sin sesion activa'}</h2>
+          <span className="mt-0.5 inline-block break-all text-xs text-[var(--otx-muted)]">
             {activeSession
               ? `${activeSession.username}@${activeSession.host}:${activeSession.port}`
-              : 'Selecciona una sesión para abrir una pestaña'}
+              : 'Selecciona una sesion para abrir una pestana'}
           </span>
         </div>
 
-        <div className={styles.actions}>
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="otx-chip">{terminalTabs.length} tabs</span>
+          {/*<span className="otx-chip">{activeTunnels.length} tuneles</span>*/}
+          <span className="otx-chip">{statusLabel}</span>
           {tunnelsVisible ? (
-            <button type="button" className={styles.secondaryButton} onClick={openCreateTunnel}>
-              Nuevo túnel
+            <button type="button" className="otx-button-secondary" onClick={openCreateTunnel}>
+              Nuevo tunel
             </button>
           ) : null}
         </div>
       </header>
 
-      <div className={styles.metrics}>
-        <div className={styles.metricCard}>
-          <span>Pestañas</span>
-          <strong>{terminalTabs.length}</strong>
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="otx-panel-muted flex items-center gap-2 px-3 py-2">
+          <span className="text-[10px] uppercase tracking-[0.18em] text-[var(--otx-muted)]">Pestanas</span>
+          <strong className="text-sm font-semibold">{terminalTabs.length}</strong>
         </div>
-        <div className={styles.metricCard}>
-          <span>Túneles</span>
-          <strong>{activeTunnels.length}</strong>
-        </div>
-        <div className={styles.metricCard}>
-          <span>Estado</span>
-          <strong>{statusLabel}</strong>
+        {/*<div className="otx-panel-muted flex items-center gap-2 px-3 py-2">
+          <span className="text-[10px] uppercase tracking-[0.18em] text-[var(--otx-muted)]">Tuneles</span>
+          <strong className="text-sm font-semibold">{activeTunnels.length}</strong>
+        </div>*/}
+        <div className="otx-panel-muted flex items-center gap-2 px-3 py-2">
+          <span className="text-[10px] uppercase tracking-[0.18em] text-[var(--otx-muted)]">Estado</span>
+          <strong className="text-sm font-semibold">{statusLabel}</strong>
         </div>
       </div>
 
-      <div className={styles.terminalPanel}>
+      <div className="flex min-h-[21rem] flex-[0_1_auto] flex-col overflow-hidden rounded-[22px] border border-[var(--otx-border)] bg-[var(--otx-terminal)] shadow-shell max-lg:max-h-[58vh] lg:max-h-[62vh] xl:max-h-[68vh]">
         <TerminalTabs />
         {activeTabId && activeSession ? (
           <TerminalViewport session={activeSession} tabId={activeTab?.id ?? activeTabId} />
         ) : (
-          <div className={styles.emptyState}>
-            <h3>No hay terminal abierta</h3>
-            <p>Selecciona una sesión del panel izquierdo para preparar una pestaña.</p>
+          <div className="grid flex-1 place-items-center px-6 py-10 text-center text-[var(--otx-muted)]">
+            <div className="max-w-md">
+              <h3 className="mb-2 text-lg font-semibold text-[var(--otx-text)]">No hay terminal abierta</h3>
+              <p className="m-0 text-sm">
+                Selecciona una sesion del panel izquierdo para preparar una pestana.
+              </p>
+            </div>
           </div>
         )}
       </div>

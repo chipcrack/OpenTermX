@@ -1,4 +1,13 @@
-import { type CSSProperties, type FormEvent, type MouseEvent as ReactMouseEvent, useEffect, useMemo, useState } from 'react';
+import {
+  type ChangeEvent,
+  type CSSProperties,
+  type FormEvent,
+  type MouseEvent as ReactMouseEvent,
+  useEffect,
+  useMemo,
+  useRef,
+  useState
+} from 'react';
 import { desktopApi } from '../../services/desktopApi';
 import { useSessionStore } from '../../stores/sessionStore';
 import type { SftpEntry } from '../../types/entities';
@@ -6,6 +15,25 @@ import styles from './SftpPanel.module.css';
 
 type SortKey = 'name' | 'size' | 'modifiedAt';
 type SortDirection = 'asc' | 'desc';
+type TransferNoticeKind = 'success' | 'error' | 'info';
+
+declare global {
+  interface Window {
+    showSaveFilePicker?: (options?: {
+      suggestedName?: string;
+      excludeAcceptAllOption?: boolean;
+      types?: Array<{
+        description?: string;
+        accept: Record<string, string[]>;
+      }>;
+    }) => Promise<{
+      createWritable: () => Promise<{
+        write: (data: BlobPart) => Promise<void>;
+        close: () => Promise<void>;
+      }>;
+    }>;
+  }
+}
 
 function normalizePath(path: string) {
   const trimmed = path.trim();
@@ -13,9 +41,7 @@ function normalizePath(path: string) {
     return '/';
   }
 
-  return `/${trimmed}`
-    .replace(/\/+/g, '/')
-    .replace(/\/$/, '');
+  return `/${trimmed}`.replace(/\/+/g, '/').replace(/\/$/, '');
 }
 
 function getParentPath(path: string) {
@@ -35,7 +61,7 @@ function joinPath(basePath: string, segment: string) {
 
 function formatModified(value: string) {
   if (!value) {
-    return '—';
+    return '--';
   }
 
   return value.replace('T', ' ').slice(0, 16);
@@ -43,7 +69,7 @@ function formatModified(value: string) {
 
 function parseSize(value: string) {
   const normalized = value.trim().toUpperCase();
-  if (!normalized || normalized === '—') {
+  if (!normalized || normalized === '--') {
     return 0;
   }
 
@@ -67,17 +93,13 @@ function parseSize(value: string) {
 
 function resolveEntryIcon(entry: SftpEntry) {
   if (entry.type === 'directory') {
-    if (entry.name.startsWith('.')) {
-      return '🗂️';
-    }
-
-    return '📁';
+    return 'DIR';
   }
 
   const lowerName = entry.name.toLowerCase();
 
   if (lowerName.startsWith('.env') || lowerName.endsWith('.conf') || lowerName.endsWith('.ini')) {
-    return '⚙️';
+    return 'CFG';
   }
 
   if (
@@ -88,7 +110,7 @@ function resolveEntryIcon(entry: SftpEntry) {
     lowerName.endsWith('.svg') ||
     lowerName.endsWith('.webp')
   ) {
-    return '🖼️';
+    return 'IMG';
   }
 
   if (
@@ -98,7 +120,7 @@ function resolveEntryIcon(entry: SftpEntry) {
     lowerName.endsWith('.rar') ||
     lowerName.endsWith('.7z')
   ) {
-    return '🗜️';
+    return 'ARC';
   }
 
   if (
@@ -110,14 +132,46 @@ function resolveEntryIcon(entry: SftpEntry) {
     lowerName.endsWith('.yaml') ||
     lowerName.endsWith('.xml')
   ) {
-    return '📝';
+    return 'TXT';
   }
 
   if (lowerName.startsWith('.')) {
-    return '👁️';
+    return 'DOT';
   }
 
-  return '📄';
+  return 'FILE';
+}
+
+function triggerBrowserDownload(fileName: string, bytes: Uint8Array) {
+  const safeBytes = new Uint8Array(bytes.byteLength);
+  safeBytes.set(bytes);
+  const blob = new Blob([safeBytes as unknown as BlobPart]);
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = fileName;
+  link.style.display = 'none';
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+async function saveBytesWithPicker(fileName: string, bytes: Uint8Array) {
+  if (typeof window.showSaveFilePicker !== 'function') {
+    triggerBrowserDownload(fileName, bytes);
+    return 'downloads';
+  }
+
+  const handle = await window.showSaveFilePicker({
+    suggestedName: fileName
+  });
+  const safeBytes = new Uint8Array(bytes.byteLength);
+  safeBytes.set(bytes);
+  const writable = await handle.createWritable();
+  await writable.write(safeBytes as unknown as BlobPart);
+  await writable.close();
+  return 'custom';
 }
 
 export function SftpPanel() {
@@ -133,6 +187,8 @@ export function SftpPanel() {
   const [showHidden, setShowHidden] = useState(false);
   const [sortKey, setSortKey] = useState<SortKey>('name');
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
+  const [uploading, setUploading] = useState(false);
+  const [downloading, setDownloading] = useState(false);
   const [columnWidths, setColumnWidths] = useState<Record<SortKey, number>>({
     name: 260,
     size: 72,
@@ -148,6 +204,11 @@ export function SftpPanel() {
     y: number;
     entry: SftpEntry;
   } | null>(null);
+  const [notice, setNotice] = useState<{
+    kind: TransferNoticeKind;
+    message: string;
+  } | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const activeSession = useMemo(
     () => sessions.find((session) => session.id === activeSessionId),
@@ -192,9 +253,7 @@ export function SftpPanel() {
         setSelectedPath((current) => (current && result.some((entry) => entry.path === current) ? current : null));
         setContextMenu(null);
       })
-      .catch((nextError) =>
-        setError(nextError instanceof Error ? nextError.message : 'No se pudo cargar el directorio remoto')
-      )
+      .catch((nextError) => setError(nextError instanceof Error ? nextError.message : 'No se pudo cargar la ruta remota'))
       .finally(() => setLoading(false));
   }, [activeSessionId, path, reloadKey]);
 
@@ -207,6 +266,15 @@ export function SftpPanel() {
       window.removeEventListener('scroll', dismissContextMenu, true);
     };
   }, []);
+
+  useEffect(() => {
+    if (!notice) {
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => setNotice(null), 3200);
+    return () => window.clearTimeout(timeoutId);
+  }, [notice]);
 
   useEffect(() => {
     if (!activeResize) {
@@ -360,7 +428,7 @@ export function SftpPanel() {
     }
 
     try {
-      const confirmed = window.confirm(`¿Eliminar "${entry.name}"?`);
+      const confirmed = window.confirm(`Eliminar "${entry.name}"?`);
       if (!confirmed) {
         return;
       }
@@ -406,10 +474,10 @@ export function SftpPanel() {
 
   const sortIndicator = (column: SortKey) => {
     if (sortKey !== column) {
-      return '↕';
+      return '<>';
     }
 
-    return sortDirection === 'asc' ? '↑' : '↓';
+    return sortDirection === 'asc' ? '^' : 'v';
   };
 
   const handleContextMenu = (event: ReactMouseEvent<HTMLButtonElement>, entry: SftpEntry) => {
@@ -420,35 +488,6 @@ export function SftpPanel() {
       y: event.clientY,
       entry
     });
-  };
-
-  const runContextAction = async (action: 'open' | 'rename' | 'delete' | 'new-folder') => {
-    setContextMenu(null);
-
-    if (action === 'open' && contextMenu) {
-      handleOpenEntry(contextMenu.entry);
-      return;
-    }
-
-    if (action === 'new-folder') {
-      await handleNewFolder();
-      return;
-    }
-
-    if (!contextMenu) {
-      return;
-    }
-
-    setSelectedPath(contextMenu.entry.path);
-
-    if (action === 'rename') {
-      await handleRenameEntry(contextMenu.entry);
-      return;
-    }
-
-    if (action === 'delete') {
-      await handleDeleteEntry(contextMenu.entry);
-    }
   };
 
   const handleResizeStart = (column: SortKey, event: ReactMouseEvent<HTMLSpanElement>) => {
@@ -462,6 +501,112 @@ export function SftpPanel() {
     });
   };
 
+  const handleSelectUpload = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleUploadFile = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file || !activeSessionId) {
+      event.target.value = '';
+      return;
+    }
+
+    try {
+      setUploading(true);
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      await desktopApi.uploadFile(activeSessionId, joinPath(path, file.name), bytes);
+      setError(null);
+      setNotice({
+        kind: 'success',
+        message: `Subida completada: ${file.name}`
+      });
+      refresh();
+    } catch (nextError) {
+      const message = nextError instanceof Error ? nextError.message : 'No se pudo subir el archivo';
+      setError(message);
+      setNotice({
+        kind: 'error',
+        message
+      });
+    } finally {
+      setUploading(false);
+      event.target.value = '';
+    }
+  };
+
+  const handleDownload = async (entry = selectedEntry) => {
+    if (!activeSessionId || !entry || entry.type !== 'file') {
+      return;
+    }
+
+    try {
+      setDownloading(true);
+      const bytes = await desktopApi.downloadFile(activeSessionId, entry.path);
+      const target = await saveBytesWithPicker(entry.name, bytes);
+      setError(null);
+      setNotice({
+        kind: 'success',
+        message:
+          target === 'custom'
+            ? `Descarga completada: ${entry.name}`
+            : `Descarga iniciada en Descargas: ${entry.name}`
+      });
+    } catch (nextError) {
+      const message = nextError instanceof Error ? nextError.message : 'No se pudo descargar el archivo';
+      setError(message);
+      if (!(nextError instanceof DOMException && nextError.name === 'AbortError')) {
+        setNotice({
+          kind: 'error',
+          message
+        });
+      }
+    } finally {
+      setDownloading(false);
+    }
+  };
+
+  const runContextAction = async (action: 'open' | 'rename' | 'delete' | 'new-folder' | 'download' | 'upload') => {
+    const currentEntry = contextMenu?.entry ?? null;
+    setContextMenu(null);
+
+    if (action === 'open' && currentEntry) {
+      handleOpenEntry(currentEntry);
+      return;
+    }
+
+    if (action === 'new-folder') {
+      await handleNewFolder();
+      return;
+    }
+
+    if (action === 'upload') {
+      handleSelectUpload();
+      return;
+    }
+
+    if (action === 'download' && currentEntry) {
+      setSelectedPath(currentEntry.path);
+      await handleDownload(currentEntry);
+      return;
+    }
+
+    if (!currentEntry) {
+      return;
+    }
+
+    setSelectedPath(currentEntry.path);
+
+    if (action === 'rename') {
+      await handleRenameEntry(currentEntry);
+      return;
+    }
+
+    if (action === 'delete') {
+      await handleDeleteEntry(currentEntry);
+    }
+  };
+
   const tableLayoutStyle = {
     '--sftp-columns': `${columnWidths.name}px ${columnWidths.size}px ${columnWidths.modifiedAt}px`,
     '--sftp-table-min-width': `${columnWidths.name + columnWidths.size + columnWidths.modifiedAt + 32}px`
@@ -469,28 +614,40 @@ export function SftpPanel() {
 
   return (
     <section className={styles.panel}>
+      {notice ? (
+        <div
+          className={`${styles.notice} ${
+            notice.kind === 'success'
+              ? styles.noticeSuccess
+              : notice.kind === 'error'
+                ? styles.noticeError
+                : styles.noticeInfo
+          }`}
+        >
+          <span>{notice.message}</span>
+          <button type="button" onClick={() => setNotice(null)} aria-label="Cerrar notificacion">
+            x
+          </button>
+        </div>
+      ) : null}
+
       <div className={styles.header}>
         <div>
           <p className={styles.kicker}>SFTP Explorer</p>
-          <h2 className={styles.title}>{activeSession?.name ?? 'Sin sesión activa'}</h2>
+          <h2 className={styles.title}>{activeSession?.name ?? 'Sin sesion activa'}</h2>
         </div>
         <div className={styles.summary}>
           <span>{visibleEntries.length} elementos</span>
-          <span>{selectedEntry ? `Seleccionado: ${selectedEntry.name}` : 'Sin selección'}</span>
+          <span>{selectedEntry ? `Seleccionado: ${selectedEntry.name}` : 'Sin seleccion'}</span>
         </div>
       </div>
 
       <div className={styles.toolbar}>
-        <button type="button" onClick={() => navigate('/')} disabled={!activeSession || loading} title="Ir a raíz">
-          ⟲
+        <button type="button" onClick={() => navigate('/')} disabled={!activeSession || loading} title="Ir a raiz">
+          Root
         </button>
-        <button
-          type="button"
-          onClick={() => navigate(homePath)}
-          disabled={!activeSession || loading}
-          title="Ir al home"
-        >
-          ⌂
+        <button type="button" onClick={() => navigate(homePath)} disabled={!activeSession || loading} title="Ir al home">
+          Home
         </button>
         <button
           type="button"
@@ -498,36 +655,33 @@ export function SftpPanel() {
           disabled={!activeSession || loading || path === '/'}
           title="Subir un nivel"
         >
-          ↑
+          Up
         </button>
         <button type="button" onClick={refresh} disabled={!activeSession || loading} title="Refrescar">
-          ↻
+          Refresh
+        </button>
+        <button type="button" onClick={handleSelectUpload} disabled={!activeSession || loading || uploading} title="Subir archivo">
+          {uploading ? 'Subiendo...' : 'Subir'}
+        </button>
+        <button
+          type="button"
+          onClick={() => void handleDownload()}
+          disabled={!selectedEntry || selectedEntry.type !== 'file' || loading || downloading}
+          title="Descargar seleccionado"
+        >
+          {downloading ? 'Descargando...' : 'Descargar'}
         </button>
         <button type="button" onClick={handleNewFolder} disabled={!activeSession || loading} title="Nueva carpeta">
-          ＋ Carpeta
+          Carpeta
         </button>
-        <button
-          type="button"
-          onClick={handleRename}
-          disabled={!selectedEntry || loading}
-          title="Renombrar seleccionado"
-        >
-          ✎ Renombrar
+        <button type="button" onClick={handleRename} disabled={!selectedEntry || loading} title="Renombrar seleccionado">
+          Renombrar
         </button>
-        <button
-          type="button"
-          onClick={handleDelete}
-          disabled={!selectedEntry || loading}
-          title="Eliminar seleccionado"
-        >
-          ✕ Eliminar
+        <button type="button" onClick={handleDelete} disabled={!selectedEntry || loading} title="Eliminar seleccionado">
+          Eliminar
         </button>
         <label className={styles.hiddenToggle}>
-          <input
-            type="checkbox"
-            checked={showHidden}
-            onChange={(event) => setShowHidden(event.target.checked)}
-          />
+          <input type="checkbox" checked={showHidden} onChange={(event) => setShowHidden(event.target.checked)} />
           <span>Ocultos</span>
         </label>
       </div>
@@ -623,7 +777,7 @@ export function SftpPanel() {
                     </span>
                     <span className={styles.nameText}>{entry.name}</span>
                   </span>
-                  <span>{entry.size || '—'}</span>
+                  <span>{entry.size || '--'}</span>
                   <span>{formatModified(entry.modifiedAt)}</span>
                 </button>
               ))}
@@ -635,7 +789,7 @@ export function SftpPanel() {
                     ? loading
                       ? 'Cargando directorio...'
                       : 'No hay elementos en esta ruta.'
-                    : 'Selecciona una sesión para explorar archivos.'}
+                    : 'Selecciona una sesion para explorar archivos.'}
                 </p>
               </div>
             ) : null}
@@ -648,6 +802,14 @@ export function SftpPanel() {
           <button type="button" onClick={() => void runContextAction('open')}>
             Abrir
           </button>
+          {contextMenu.entry.type === 'file' ? (
+            <button type="button" onClick={() => void runContextAction('download')}>
+              Descargar
+            </button>
+          ) : null}
+          <button type="button" onClick={() => void runContextAction('upload')}>
+            Subir aqui
+          </button>
           <button type="button" onClick={() => void runContextAction('rename')}>
             Renombrar
           </button>
@@ -659,6 +821,8 @@ export function SftpPanel() {
           </button>
         </div>
       ) : null}
+
+      <input ref={fileInputRef} type="file" hidden onChange={handleUploadFile} />
     </section>
   );
 }

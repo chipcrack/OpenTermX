@@ -1,6 +1,5 @@
 import { useMemo } from 'react';
 import { useSessionStore } from '../../stores/sessionStore';
-import styles from './TunnelManager.module.css';
 
 export function TunnelManager() {
   const tunnels = useSessionStore((state) => state.tunnels);
@@ -15,41 +14,43 @@ export function TunnelManager() {
   );
 
   return (
-    <section className={styles.panel}>
-      <div className={styles.header}>
+    <section className="otx-panel-muted flex flex-col gap-3 p-3">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <p className={styles.kicker}>Tunnels</p>
-          <h3 className={styles.title}>Port forwarding local</h3>
+          <p className="otx-kicker m-0">Tunnels</p>
+          <h3 className="mt-1.5 text-sm font-semibold">Port forwarding local</h3>
         </div>
-        <button type="button" className={styles.primaryButton} onClick={openCreateTunnel}>
-          + Nuevo túnel
+        <button type="button" className="otx-button-primary" onClick={openCreateTunnel}>
+          + Nuevo tunel
         </button>
       </div>
 
-      <div className={styles.list}>
+      <div className="flex flex-col gap-2">
         {activeTunnels.map((tunnel) => (
-          <article key={tunnel.id} className={styles.card}>
-            <div className={styles.cardHeader}>
+          <article key={tunnel.id} className="rounded-xl border border-[var(--otx-border)] bg-white/[0.03] p-3">
+            <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
               <div>
-                <strong>{tunnel.name}</strong>
-                <span>
-                  localhost:{tunnel.localPort} → {tunnel.remoteHost}:{tunnel.remotePort}
+                <strong className="block text-[12px] font-semibold">{tunnel.name}</strong>
+                <span className="mt-0.5 block font-mono text-[10px] text-[var(--otx-muted)]">
+                  localhost:{tunnel.localPort} -&gt; {tunnel.remoteHost}:{tunnel.remotePort}
                 </span>
               </div>
               <span
-                className={`${styles.status} ${
-                  tunnel.status === 'active' ? styles.statusActive : styles.statusInactive
+                className={`inline-flex rounded-full px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] ${
+                  tunnel.status === 'active'
+                    ? 'bg-emerald-500/12 text-emerald-300'
+                    : 'bg-slate-400/12 text-[var(--otx-text-soft)]'
                 }`}
               >
                 {tunnel.status}
               </span>
             </div>
 
-            <div className={styles.actions}>
-              <button type="button" className={styles.secondaryButton} onClick={() => openEditTunnel(tunnel.id)}>
+            <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+              <button type="button" className="otx-button-secondary" onClick={() => openEditTunnel(tunnel.id)}>
                 Editar
               </button>
-              <button type="button" className={styles.dangerButton} onClick={() => deleteTunnel(tunnel.id)}>
+              <button type="button" className="otx-button-danger" onClick={() => deleteTunnel(tunnel.id)}>
                 Eliminar
               </button>
             </div>
@@ -57,8 +58,8 @@ export function TunnelManager() {
         ))}
 
         {!activeTunnels.length ? (
-          <div className={styles.emptyState}>
-            <p>Crea un túnel local para dejar listo el flujo del MVP.</p>
+          <div className="rounded-2xl border border-dashed border-[var(--otx-border)] px-4 py-6 text-center text-sm text-[var(--otx-muted)]">
+            <p className="m-0">Crea un tunel local para dejar listo el flujo del MVP.</p>
           </div>
         ) : null}
       </div>

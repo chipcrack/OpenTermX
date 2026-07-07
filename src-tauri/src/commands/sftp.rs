@@ -1,4 +1,7 @@
-use std::path::Path;
+use std::{
+  io::{Read, Write},
+  path::Path,
+};
 
 use chrono::{DateTime, Utc};
 use serde::Serialize;
@@ -21,7 +24,7 @@ pub struct SftpEntry {
 
 fn format_size(size: Option<u64>) -> String {
   let Some(bytes) = size else {
-    return "—".to_string();
+    return "--".to_string();
   };
 
   const KB: f64 = 1024.0;
@@ -43,12 +46,12 @@ fn format_size(size: Option<u64>) -> String {
 
 fn format_modified(timestamp: Option<u64>) -> String {
   let Some(seconds) = timestamp else {
-    return "—".to_string();
+    return "--".to_string();
   };
 
   DateTime::<Utc>::from_timestamp(seconds as i64, 0)
     .map(|value| value.format("%Y-%m-%d %H:%M").to_string())
-    .unwrap_or_else(|| "—".to_string())
+    .unwrap_or_else(|| "--".to_string())
 }
 
 fn with_sftp<T>(
@@ -109,7 +112,7 @@ pub fn list_directory(
             "file".to_string()
           },
           size: if stat.is_dir() {
-            "—".to_string()
+            "--".to_string()
           } else {
             format_size(stat.size)
           },
@@ -167,14 +170,50 @@ pub fn delete_entry(
   entry_type: &str,
   state: tauri::State<'_, DatabaseState>,
 ) -> Result<(), String> {
+  with_sftp(session_id, state, |sftp, _| match entry_type {
+    "directory" => sftp
+      .rmdir(Path::new(path))
+      .map_err(|error| format!("No se pudo eliminar la carpeta {path}: {error}")),
+    _ => sftp
+      .unlink(Path::new(path))
+      .map_err(|error| format!("No se pudo eliminar el archivo {path}: {error}")),
+  })
+}
+
+#[tauri::command]
+pub fn upload_file(
+  session_id: &str,
+  remote_path: &str,
+  contents: Vec<u8>,
+  state: tauri::State<'_, DatabaseState>,
+) -> Result<(), String> {
   with_sftp(session_id, state, |sftp, _| {
-    match entry_type {
-      "directory" => sftp
-        .rmdir(Path::new(path))
-        .map_err(|error| format!("No se pudo eliminar la carpeta {path}: {error}")),
-      _ => sftp
-        .unlink(Path::new(path))
-        .map_err(|error| format!("No se pudo eliminar el archivo {path}: {error}")),
-    }
+    let mut remote_file = sftp
+      .create(Path::new(remote_path))
+      .map_err(|error| format!("No se pudo crear el archivo remoto {remote_path}: {error}"))?;
+
+    remote_file
+      .write_all(&contents)
+      .map_err(|error| format!("No se pudo escribir el archivo remoto {remote_path}: {error}"))
+  })
+}
+
+#[tauri::command]
+pub fn download_file(
+  session_id: &str,
+  path: &str,
+  state: tauri::State<'_, DatabaseState>,
+) -> Result<Vec<u8>, String> {
+  with_sftp(session_id, state, |sftp, _| {
+    let mut remote_file = sftp
+      .open(Path::new(path))
+      .map_err(|error| format!("No se pudo abrir el archivo remoto {path}: {error}"))?;
+
+    let mut buffer = Vec::new();
+    remote_file
+      .read_to_end(&mut buffer)
+      .map_err(|error| format!("No se pudo descargar el archivo remoto {path}: {error}"))?;
+
+    Ok(buffer)
   })
 }

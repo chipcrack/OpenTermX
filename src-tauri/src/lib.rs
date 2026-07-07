@@ -36,7 +36,9 @@ pub fn run() {
       commands::sftp::list_directory,
       commands::sftp::create_directory,
       commands::sftp::rename_entry,
-      commands::sftp::delete_entry
+      commands::sftp::delete_entry,
+      commands::sftp::upload_file,
+      commands::sftp::download_file
     ])
     .run(tauri::generate_context!())
     .expect("error while running OpenTermX");
