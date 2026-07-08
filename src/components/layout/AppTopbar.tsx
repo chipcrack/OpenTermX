@@ -3,6 +3,27 @@ import { useSessionStore } from '../../stores/sessionStore';
 import { useUiStore } from '../../stores/uiStore';
 import { getEnvironmentAppearance, getSessionAccent, withAlpha } from '../../utils/sessionAppearance';
 
+function ThemeIcon({ theme }: { theme: 'light' | 'dark' }) {
+  if (theme === 'dark') {
+    return (
+      <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.8">
+        <path
+          d="M21 12.8A9 9 0 1 1 11.2 3a7.1 7.1 0 0 0 9.8 9.8Z"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </svg>
+    );
+  }
+
+  return (
+    <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.8">
+      <circle cx="12" cy="12" r="4.2" />
+      <path d="M12 2.5v2.1M12 19.4v2.1M4.6 4.6l1.5 1.5M17.9 17.9l1.5 1.5M2.5 12h2.1M19.4 12h2.1M4.6 19.4l1.5-1.5M17.9 6.1l1.5-1.5" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 export function AppTopbar() {
   const theme = useUiStore((state) => state.theme);
   const toggleTheme = useUiStore((state) => state.toggleTheme);
@@ -72,10 +93,18 @@ export function AppTopbar() {
           }
         >
           {activeBadge}
-          <span className="text-[var(--otx-text-soft)]">{activeSession ? activeSession.environment : 'No conection'}</span>
+          <span className="text-[var(--otx-text-soft)]">{activeSession ? activeSession.environment : 'Sin conexion'}</span>
         </span>
-        <button type="button" className="otx-button-secondary min-w-[5.75rem]" onClick={toggleTheme}>
-          {theme === 'dark' ? 'Tema oscuro' : 'Tema claro'}
+        <button
+          type="button"
+          className="otx-button-secondary h-10 w-10 rounded-full p-0"
+          onClick={toggleTheme}
+          aria-label={theme === 'dark' ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
+          title={theme === 'dark' ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
+        >
+          <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-[var(--otx-brand-soft)] text-[var(--otx-brand)]">
+            <ThemeIcon theme={theme} />
+          </span>
         </button>
       </div>
     </div>

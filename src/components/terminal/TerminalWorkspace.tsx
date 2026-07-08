@@ -30,8 +30,9 @@ export function TerminalWorkspace() {
     : activeTab?.connected
       ? 'SSH activo'
       : activeSession
-        ? 'Pendiente'
+      ? 'Pendiente'
         : 'Sin iniciar';
+  const extendedStatus = activeTab?.statusText ?? statusLabel;
 
   return (
     <section className="flex h-full min-h-0 flex-col gap-3 overflow-hidden p-3 max-lg:overflow-y-auto">
@@ -69,8 +70,23 @@ export function TerminalWorkspace() {
         </div>*/}
         <div className="otx-panel-muted flex items-center gap-2 px-3 py-2">
           <span className="text-[10px] uppercase tracking-[0.18em] text-[var(--otx-muted)]">Estado</span>
-          <strong className="text-sm font-semibold">{statusLabel}</strong>
+          <strong className="text-sm font-semibold">{extendedStatus}</strong>
         </div>
+        {activeTab?.lastError ? (
+          <div className="otx-panel-muted flex min-w-[16rem] items-center gap-2 px-3 py-2 text-[var(--otx-danger)]">
+            <span className="text-[10px] uppercase tracking-[0.18em] text-[var(--otx-muted)]">Ultimo error</span>
+            <strong className="truncate text-sm font-semibold">{activeTab.lastError}</strong>
+          </div>
+        ) : null}
+      </div>
+
+      {activeTab?.lastEventAt ? (
+        <div className="shrink-0 text-xs text-[var(--otx-muted)]">
+          Ultima actividad de terminal: {new Date(activeTab.lastEventAt).toLocaleString()}
+        </div>
+      ) : null}
+      <div className="sr-only" aria-live="polite">
+        {extendedStatus}
       </div>
 
       <div className="flex min-h-[21rem] flex-1 flex-col overflow-hidden rounded-[22px] border border-[var(--otx-border)] bg-[var(--otx-terminal)] shadow-shell max-lg:min-h-[24rem]">

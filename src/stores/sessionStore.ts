@@ -5,6 +5,7 @@ import type {
   CredentialDraft,
   Session,
   SessionDraft,
+  TerminalController,
   TerminalTab,
   Tunnel,
   TunnelDraft
@@ -16,6 +17,7 @@ interface SessionStore {
   tunnels: Tunnel[];
   activeSessionId: string | null;
   terminalTabs: TerminalTab[];
+  terminalControllers: Record<string, TerminalController | undefined>;
   activeTabId: string | null;
   sftpVisible: boolean;
   tunnelsVisible: boolean;
@@ -35,6 +37,9 @@ interface SessionStore {
   setTabConnection: (tabId: string, connected: boolean) => void;
   setTabReconnecting: (tabId: string, reconnecting: boolean) => void;
   setTabShellId: (tabId: string, shellId: string | null) => void;
+  setTabStatus: (tabId: string, statusText: string, lastError?: string | null) => void;
+  registerTerminalController: (tabId: string, controller: TerminalController) => void;
+  unregisterTerminalController: (tabId: string) => void;
   toggleSftpPanel: () => void;
   toggleTunnelsPanel: () => void;
   openCreateSession: () => void;
@@ -70,7 +75,10 @@ function buildTab(session: Session): TerminalTab {
     title: session.name,
     connected: false,
     reconnecting: false,
-    shellId: null
+    shellId: null,
+    statusText: 'Pendiente',
+    lastError: null,
+    lastEventAt: null
   };
 }
 
@@ -101,6 +109,7 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
   tunnels: [],
   activeSessionId: null,
   terminalTabs: [],
+  terminalControllers: {},
   activeTabId: null,
   sftpVisible: false,
   tunnelsVisible: false,
@@ -196,9 +205,12 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
 
     const nextTabs = get().terminalTabs.filter((tab) => tab.id !== tabId);
     const nextActiveTab = nextTabs.length > 0 ? nextTabs[nextTabs.length - 1] : null;
+    const { [tabId]: _removedController, ...remainingControllers } = get().terminalControllers;
+    void _removedController;
 
     set({
       terminalTabs: withNormalizedTabTitles(nextTabs, get().sessions),
+      terminalControllers: remainingControllers,
       activeTabId: nextActiveTab?.id ?? null,
       activeSessionId: nextActiveTab?.sessionId ?? null
     });
@@ -206,14 +218,31 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
   setTabConnection: (tabId, connected) => {
     set((state) => ({
       terminalTabs: state.terminalTabs.map((tab) =>
-        tab.id === tabId ? { ...tab, connected, reconnecting: connected ? false : tab.reconnecting } : tab
+        tab.id === tabId
+          ? {
+              ...tab,
+              connected,
+              reconnecting: connected ? false : tab.reconnecting,
+              statusText: connected ? 'SSH activo' : tab.reconnecting ? tab.statusText : 'Pendiente',
+              lastError: connected ? null : tab.lastError,
+              lastEventAt: new Date().toISOString()
+            }
+          : tab
       )
     }));
   },
   setTabReconnecting: (tabId, reconnecting) => {
     set((state) => ({
       terminalTabs: state.terminalTabs.map((tab) =>
-        tab.id === tabId ? { ...tab, reconnecting, connected: reconnecting ? false : tab.connected } : tab
+        tab.id === tabId
+          ? {
+              ...tab,
+              reconnecting,
+              connected: reconnecting ? false : tab.connected,
+              statusText: reconnecting ? 'Reconectando' : tab.connected ? 'SSH activo' : tab.statusText,
+              lastEventAt: new Date().toISOString()
+            }
+          : tab
       )
     }));
   },
@@ -221,6 +250,37 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
     set((state) => ({
       terminalTabs: state.terminalTabs.map((tab) => (tab.id === tabId ? { ...tab, shellId } : tab))
     }));
+  },
+  setTabStatus: (tabId, statusText, lastError = undefined) => {
+    set((state) => ({
+      terminalTabs: state.terminalTabs.map((tab) =>
+        tab.id === tabId
+          ? {
+              ...tab,
+              statusText,
+              lastError: lastError === undefined ? tab.lastError : lastError,
+              lastEventAt: new Date().toISOString()
+            }
+          : tab
+      )
+    }));
+  },
+  registerTerminalController: (tabId, controller) => {
+    set((state) => ({
+      terminalControllers: {
+        ...state.terminalControllers,
+        [tabId]: controller
+      }
+    }));
+  },
+  unregisterTerminalController: (tabId) => {
+    set((state) => {
+      const { [tabId]: _removedController, ...remainingControllers } = state.terminalControllers;
+      void _removedController;
+      return {
+        terminalControllers: remainingControllers
+      };
+    });
   },
   toggleSftpPanel: () => {
     set((state) => ({
@@ -320,6 +380,11 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
           sessions,
           tunnels,
           terminalTabs: withNormalizedTabTitles(filteredTabs, sessions),
+          terminalControllers: Object.fromEntries(
+            Object.entries(state.terminalControllers).filter(([tabId]) =>
+              filteredTabs.some((tab) => tab.id === tabId)
+            )
+          ),
           activeTabId: nextActiveTab?.id ?? null,
           activeSessionId: nextActiveTab?.sessionId ?? null,
           loading: false,

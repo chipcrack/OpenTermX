@@ -57,7 +57,9 @@ export function TerminalTabs() {
               </span>*/}
               <span
                 className={`h-2 w-2 rounded-full ${
-                  tab.connected
+                  tab.reconnecting
+                    ? 'bg-sky-400 shadow-[0_0_12px_rgba(56,189,248,0.8)]'
+                    : tab.connected
                     ? 'bg-emerald-400 shadow-[0_0_12px_rgba(74,222,128,0.85)]'
                     : 'bg-amber-400 shadow-[0_0_12px_rgba(251,191,36,0.7)]'
                 }`}

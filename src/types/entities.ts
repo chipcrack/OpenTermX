@@ -79,6 +79,22 @@ export interface TerminalTab {
   connected: boolean;
   reconnecting: boolean;
   shellId: string | null;
+  statusText: string;
+  lastError: string | null;
+  lastEventAt: string | null;
+}
+
+export interface TerminalController {
+  focus: () => void;
+  reconnectNow: () => Promise<void>;
+  copySelection: () => Promise<boolean>;
+  copyAll: () => Promise<boolean>;
+  paste: () => Promise<boolean>;
+  selectAll: () => void;
+  clear: () => void;
+  copyDiagnostics: () => Promise<boolean>;
+  findNext: (query: string) => boolean;
+  findPrevious: (query: string) => boolean;
 }
 
 export interface SftpEntry {

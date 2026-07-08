@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import '@xterm/xterm/css/xterm.css';
 import { desktopApi } from '../../services/desktopApi';
 import { useSessionStore } from '../../stores/sessionStore';
@@ -10,6 +10,17 @@ interface TerminalViewportProps {
   session: Session;
   tabId: string;
   isActive: boolean;
+}
+
+interface SearchMatch {
+  row: number;
+  col: number;
+  length: number;
+}
+
+interface ContextMenuState {
+  x: number;
+  y: number;
 }
 
 function buildAnsiPalette(themeMode: ThemeMode) {
@@ -130,7 +141,69 @@ function fitTerminalViewport(container: HTMLDivElement, terminal: any, fitAddon:
   });
 }
 
+function getTerminalBufferLines(terminal: any) {
+  const activeBuffer = terminal?.buffer?.active;
+
+  if (!activeBuffer || typeof activeBuffer.length !== 'number') {
+    return [] as string[];
+  }
+
+  const lines: string[] = [];
+  for (let index = 0; index < activeBuffer.length; index += 1) {
+    lines.push(activeBuffer.getLine(index)?.translateToString(true) ?? '');
+  }
+
+  return lines;
+}
+
+function findTerminalMatches(terminal: any, query: string) {
+  const normalizedQuery = query.trim().toLocaleLowerCase();
+
+  if (!normalizedQuery) {
+    return [] as SearchMatch[];
+  }
+
+  const matches: SearchMatch[] = [];
+  const lines = getTerminalBufferLines(terminal);
+
+  lines.forEach((line, row) => {
+    const normalizedLine = line.toLocaleLowerCase();
+    let startIndex = 0;
+
+    while (startIndex < normalizedLine.length) {
+      const foundAt = normalizedLine.indexOf(normalizedQuery, startIndex);
+      if (foundAt === -1) {
+        break;
+      }
+
+      matches.push({
+        row,
+        col: foundAt,
+        length: normalizedQuery.length
+      });
+
+      startIndex = foundAt + Math.max(normalizedQuery.length, 1);
+    }
+  });
+
+  return matches;
+}
+
+function revealTerminalMatch(terminal: any, match: SearchMatch | undefined) {
+  if (!match) {
+    return false;
+  }
+
+  terminal.select(match.col, match.row, match.length);
+  if (typeof terminal.scrollToLine === 'function') {
+    terminal.scrollToLine(Math.max(match.row - 2, 0));
+  }
+  terminal.focus();
+  return true;
+}
+
 export function TerminalViewport({ session, tabId, isActive }: TerminalViewportProps) {
+  const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const terminalRef = useRef<any>(null);
   const fitAddonRef = useRef<any>(null);
@@ -150,9 +223,21 @@ export function TerminalViewport({ session, tabId, isActive }: TerminalViewportP
   const reconnectAttemptRef = useRef(0);
   const hasConnectedRef = useRef(false);
   const manualCloseRef = useRef(false);
+  const searchStateRef = useRef<{
+    query: string;
+    matches: SearchMatch[];
+    activeIndex: number;
+  }>({
+    query: '',
+    matches: [],
+    activeIndex: -1
+  });
   const setTabConnection = useSessionStore((state) => state.setTabConnection);
   const setTabReconnecting = useSessionStore((state) => state.setTabReconnecting);
   const setTabShellId = useSessionStore((state) => state.setTabShellId);
+  const setTabStatus = useSessionStore((state) => state.setTabStatus);
+  const registerTerminalController = useSessionStore((state) => state.registerTerminalController);
+  const unregisterTerminalController = useSessionStore((state) => state.unregisterTerminalController);
   const themeMode = useUiStore((state) => state.theme);
 
   useEffect(() => {
@@ -206,6 +291,7 @@ export function TerminalViewport({ session, tabId, isActive }: TerminalViewportP
 
     let disposed = false;
     let detachContextMenuListener: (() => void) | null = null;
+    let detachGlobalPointerListener: (() => void) | null = null;
 
     const clearReconnectTimer = () => {
       if (reconnectTimerRef.current !== null) {
@@ -228,11 +314,14 @@ export function TerminalViewport({ session, tabId, isActive }: TerminalViewportP
 
     const cleanup = () => {
       manualCloseRef.current = true;
+      setContextMenu(null);
       clearReconnectTimer();
       clearTransportLoops();
       syncTransportLoopRef.current = null;
       detachContextMenuListener?.();
       detachContextMenuListener = null;
+      detachGlobalPointerListener?.();
+      detachGlobalPointerListener = null;
       resizeObserverRef.current?.disconnect();
       resizeObserverRef.current = null;
       inputDisposableRef.current?.dispose();
@@ -242,14 +331,21 @@ export function TerminalViewport({ session, tabId, isActive }: TerminalViewportP
       transportClosedRef.current = true;
       reconnectAttemptRef.current = 0;
       hasConnectedRef.current = false;
+      searchStateRef.current = {
+        query: '',
+        matches: [],
+        activeIndex: -1
+      };
       bootstrappedRef.current = false;
       openingRef.current = false;
+      unregisterTerminalController(tabId);
 
       if (shellIdRef.current) {
         void desktopApi.closeTerminal(shellIdRef.current);
         setTabConnection(tabId, false);
         setTabReconnecting(tabId, false);
         setTabShellId(tabId, null);
+        setTabStatus(tabId, 'Pendiente', null);
         shellIdRef.current = null;
       }
 
@@ -297,12 +393,23 @@ export function TerminalViewport({ session, tabId, isActive }: TerminalViewportP
         );
         terminal.writeln(`${colors.muted}Preparando terminal interactiva...${colors.reset}`);
         terminal.writeln('');
+        setTabStatus(tabId, 'Preparando terminal...', null);
 
         const writeStatusLine = (message: string) => {
           if (!disposed && terminalRef.current) {
             terminalRef.current.writeln('');
             terminalRef.current.writeln(message);
           }
+        };
+
+        const writeClipboardText = async (text: string) => {
+          await navigator.clipboard.writeText(text);
+        };
+
+        const readClipboardText = async () => navigator.clipboard.readText();
+
+        const updateStatus = (statusText: string, lastError?: string | null) => {
+          setTabStatus(tabId, statusText, lastError);
         };
 
         const copySelectionToClipboard = async () => {
@@ -314,10 +421,33 @@ export function TerminalViewport({ session, tabId, isActive }: TerminalViewportP
           }
 
           try {
-            await navigator.clipboard.writeText(selection);
+            await writeClipboardText(selection);
+            updateStatus('Seleccion copiada', null);
             return true;
           } catch (error) {
-            writeStatusLine(`Error al copiar: ${describeError(error)}`);
+            const message = describeError(error);
+            writeStatusLine(`Error al copiar: ${message}`);
+            updateStatus('Error al copiar', message);
+            return false;
+          }
+        };
+
+        const copyTerminalBufferToClipboard = async () => {
+          try {
+            const lines = getTerminalBufferLines(terminalRef.current);
+            const payload = lines.join('\n').trimEnd();
+
+            if (!payload) {
+              return false;
+            }
+
+            await writeClipboardText(payload);
+            updateStatus('Buffer copiado', null);
+            return true;
+          } catch (error) {
+            const message = describeError(error);
+            writeStatusLine(`Error al copiar el buffer: ${message}`);
+            updateStatus('Error al copiar buffer', message);
             return false;
           }
         };
@@ -328,7 +458,7 @@ export function TerminalViewport({ session, tabId, isActive }: TerminalViewportP
           }
 
           try {
-            const text = await navigator.clipboard.readText();
+            const text = await readClipboardText();
 
             if (!text) {
               return false;
@@ -336,11 +466,98 @@ export function TerminalViewport({ session, tabId, isActive }: TerminalViewportP
 
             terminalRef.current.paste(text);
             terminalRef.current.focus();
+            updateStatus('Texto pegado', null);
             return true;
           } catch (error) {
-            writeStatusLine(`Error al pegar: ${describeError(error)}`);
+            const message = describeError(error);
+            writeStatusLine(`Error al pegar: ${message}`);
+            updateStatus('Error al pegar', message);
             return false;
           }
+        };
+
+        const selectAllTerminalOutput = () => {
+          terminal.selectAll();
+          terminal.focus();
+          updateStatus('Seleccion total lista', null);
+        };
+
+        const clearTerminalViewport = () => {
+          terminal.clear();
+          terminal.focus();
+          updateStatus('Terminal limpiada', null);
+        };
+
+        const copyTerminalDiagnostics = async () => {
+          const diagnostics = [
+            'OpenTermX terminal diagnostics',
+            `session=${session.name}`,
+            `host=${session.username}@${session.host}:${session.port}`,
+            `tabId=${tabId}`,
+            `shellId=${shellIdRef.current ?? 'none'}`,
+            `connected=${String(Boolean(shellIdRef.current) && !transportClosedRef.current)}`,
+            `reconnectAttempts=${reconnectAttemptRef.current}`,
+            `cols=${terminal.cols}`,
+            `rows=${terminal.rows}`,
+            `bufferLines=${getTerminalBufferLines(terminal).length}`,
+            `timestamp=${new Date().toISOString()}`
+          ].join('\n');
+
+          try {
+            await writeClipboardText(diagnostics);
+            updateStatus('Diagnostico copiado', null);
+            return true;
+          } catch (error) {
+            const message = describeError(error);
+            writeStatusLine(`Error al copiar diagnostico: ${message}`);
+            updateStatus('Error al copiar diagnostico', message);
+            return false;
+          }
+        };
+
+        const runSearch = (query: string, direction: 'next' | 'previous') => {
+          const normalizedQuery = query.trim();
+          if (!normalizedQuery) {
+            terminal.clearSelection();
+            searchStateRef.current = {
+              query: '',
+              matches: [],
+              activeIndex: -1
+            };
+            updateStatus('Busqueda limpiada', null);
+            return false;
+          }
+
+          if (searchStateRef.current.query !== normalizedQuery) {
+            searchStateRef.current = {
+              query: normalizedQuery,
+              matches: findTerminalMatches(terminal, normalizedQuery),
+              activeIndex: direction === 'next' ? -1 : 0
+            };
+          }
+
+          const { matches } = searchStateRef.current;
+          if (!matches.length) {
+            updateStatus(`Sin coincidencias para "${normalizedQuery}"`, null);
+            return false;
+          }
+
+          const nextIndex =
+            direction === 'next'
+              ? (searchStateRef.current.activeIndex + 1 + matches.length) % matches.length
+              : (searchStateRef.current.activeIndex - 1 + matches.length) % matches.length;
+
+          searchStateRef.current.activeIndex = nextIndex;
+          const found = revealTerminalMatch(terminal, matches[nextIndex]);
+
+          if (found) {
+            updateStatus(
+              `Coincidencia ${nextIndex + 1} de ${matches.length} para "${normalizedQuery}"`,
+              null
+            );
+          }
+
+          return found;
         };
 
         const syncTransportLoops = (forceFlush = false) => {
@@ -385,6 +602,7 @@ export function TerminalViewport({ session, tabId, isActive }: TerminalViewportP
             writeStatusLine(message);
           }
 
+          updateStatus(`Reconectando en ${Math.round(delay / 1000)} s`, message ?? null);
           writeStatusLine(
             `${colors.muted}Conexion interrumpida. Reintentando en ${Math.round(delay / 1000)} s...${colors.reset}`
           );
@@ -425,6 +643,7 @@ export function TerminalViewport({ session, tabId, isActive }: TerminalViewportP
           shellIdRef.current = null;
           setTabConnection(tabId, false);
           setTabShellId(tabId, null);
+          updateStatus(shouldReconnect ? 'Reconectando' : 'Sesion detenida', message ?? null);
 
           if (shellId) {
             void desktopApi.closeTerminal(shellId).catch(() => undefined);
@@ -451,6 +670,7 @@ export function TerminalViewport({ session, tabId, isActive }: TerminalViewportP
 
           if (isReconnect) {
             writeStatusLine(`${colors.info}Intentando reconectar la sesion SSH...${colors.reset}`);
+            updateStatus('Intentando reconectar...', null);
           }
 
           try {
@@ -470,6 +690,7 @@ export function TerminalViewport({ session, tabId, isActive }: TerminalViewportP
             setTabShellId(tabId, result.shellId);
             setTabConnection(tabId, result.connected);
             setTabReconnecting(tabId, false);
+            updateStatus(result.connected ? 'SSH activo' : 'Pendiente', null);
 
             terminal.writeln('');
             terminal.writeln(`${colors.success}${result.banner}${colors.reset}`);
@@ -497,13 +718,23 @@ export function TerminalViewport({ session, tabId, isActive }: TerminalViewportP
             if (hasConnectedRef.current && !disposed && !manualCloseRef.current) {
               scheduleReconnect(`Error de reconexion: ${describeError(error)}`);
             } else if (!disposed) {
+              const message = describeError(error);
               setTabReconnecting(tabId, false);
-              writeStatusLine(`Error de arranque: ${describeError(error)}`);
+              updateStatus('Error de arranque', message);
+              writeStatusLine(`Error de arranque: ${message}`);
               terminal.write('$ ');
             }
           } finally {
             openingRef.current = false;
           }
+        };
+
+        const reconnectNow = async () => {
+          clearReconnectTimer();
+          closeTransport({
+            message: `${colors.info}Reconectando manualmente...${colors.reset}`
+          });
+          await startTerminalSession(true);
         };
 
         const flushRemoteOutput = async () => {
@@ -534,8 +765,9 @@ export function TerminalViewport({ session, tabId, isActive }: TerminalViewportP
               closeTransport({ shouldReconnect: hasConnectedRef.current });
             }
           } catch (error) {
+            const message = describeError(error);
             closeTransport({
-              message: `Error de lectura: ${describeError(error)}`,
+              message: `Error de lectura: ${message}`,
               shouldReconnect: hasConnectedRef.current
             });
           } finally {
@@ -554,20 +786,65 @@ export function TerminalViewport({ session, tabId, isActive }: TerminalViewportP
           try {
             await desktopApi.writeTerminalInput(shellIdRef.current, payload);
           } catch (error) {
+            const message = describeError(error);
             closeTransport({
-              message: `Error de escritura: ${describeError(error)}`,
+              message: `Error de escritura: ${message}`,
               shouldReconnect: hasConnectedRef.current
             });
           }
         };
 
         syncTransportLoopRef.current = syncTransportLoops;
+        registerTerminalController(tabId, {
+          focus: () => {
+            terminal.focus();
+          },
+          reconnectNow,
+          copySelection: copySelectionToClipboard,
+          copyAll: copyTerminalBufferToClipboard,
+          paste: pasteClipboardIntoTerminal,
+          selectAll: selectAllTerminalOutput,
+          clear: clearTerminalViewport,
+          copyDiagnostics: copyTerminalDiagnostics,
+          findNext: (query) => runSearch(query, 'next'),
+          findPrevious: (query) => runSearch(query, 'previous')
+        });
 
         terminal.attachCustomKeyEventHandler((event: KeyboardEvent) => {
           const isModifier = event.ctrlKey || event.metaKey;
           const key = event.key.toLowerCase();
 
-          if (isModifier && key === 'v') {
+          if (isModifier && event.shiftKey && key === 'v') {
+            event.preventDefault();
+            void pasteClipboardIntoTerminal();
+            return false;
+          }
+
+          if (isModifier && event.shiftKey && key === 'c') {
+            event.preventDefault();
+            void copySelectionToClipboard();
+            return false;
+          }
+
+          if (isModifier && event.shiftKey && key === 'a') {
+            event.preventDefault();
+            selectAllTerminalOutput();
+            return false;
+          }
+
+          if (isModifier && event.shiftKey && key === 'k') {
+            event.preventDefault();
+            clearTerminalViewport();
+            return false;
+          }
+
+          if (isModifier && event.shiftKey && key === 'r') {
+            event.preventDefault();
+            void reconnectNow();
+            return false;
+          }
+
+          if (event.shiftKey && key === 'insert') {
             event.preventDefault();
             void pasteClipboardIntoTerminal();
             return false;
@@ -579,40 +856,26 @@ export function TerminalViewport({ session, tabId, isActive }: TerminalViewportP
             return false;
           }
 
-          if (isModifier && event.shiftKey && key === 'c') {
-            event.preventDefault();
-            void copySelectionToClipboard();
-            return false;
-          }
-
-          if (event.shiftKey && key === 'insert') {
-            event.preventDefault();
-            void pasteClipboardIntoTerminal();
-            return false;
-          }
-
           return true;
         });
 
         const handleTerminalContextMenu = (event: MouseEvent) => {
           event.preventDefault();
-
-          if (terminal.hasSelection()) {
-            void copySelectionToClipboard().then((copied) => {
-              if (copied) {
-                terminal.clearSelection();
-                terminal.focus();
-              }
-            });
-            return;
-          }
-
-          void pasteClipboardIntoTerminal();
+          const bounds = containerRef.current?.getBoundingClientRect();
+          setContextMenu({
+            x: Math.max(12, (event.clientX ?? 0) - (bounds?.left ?? 0)),
+            y: Math.max(12, (event.clientY ?? 0) - (bounds?.top ?? 0))
+          });
         };
 
         containerRef.current.addEventListener('contextmenu', handleTerminalContextMenu);
         detachContextMenuListener = () => {
           containerRef.current?.removeEventListener('contextmenu', handleTerminalContextMenu);
+        };
+        const closeContextMenu = () => setContextMenu(null);
+        window.addEventListener('pointerdown', closeContextMenu);
+        detachGlobalPointerListener = () => {
+          window.removeEventListener('pointerdown', closeContextMenu);
         };
 
         inputDisposableRef.current = terminal.onData((input: string) => {
@@ -646,13 +909,102 @@ export function TerminalViewport({ session, tabId, isActive }: TerminalViewportP
       disposed = true;
       cleanup();
     };
-  }, [session.id, setTabConnection, setTabReconnecting, setTabShellId, tabId]);
+  }, [
+    registerTerminalController,
+    session.id,
+    setTabConnection,
+    setTabReconnecting,
+    setTabShellId,
+    setTabStatus,
+    tabId,
+    unregisterTerminalController
+  ]);
 
   return (
     <div
       className={`${styles.viewport} ${isActive ? styles.viewportActive : styles.viewportHidden}`}
       ref={containerRef}
       aria-hidden={!isActive}
-    />
+      onMouseDown={() => setContextMenu(null)}
+    >
+      {contextMenu ? (
+        <div
+          className="absolute z-20 min-w-[13rem] rounded-2xl border border-[var(--otx-border)] bg-[var(--otx-panel-strong)] p-1.5 shadow-2xl backdrop-blur"
+          style={{
+            left: `${contextMenu.x}px`,
+            top: `${contextMenu.y}px`
+          }}
+          onMouseDown={(event) => event.stopPropagation()}
+          onClick={(event) => event.stopPropagation()}
+        >
+          <button
+            type="button"
+            className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm hover:bg-[var(--otx-brand-soft)]"
+            onClick={() => {
+              setContextMenu(null);
+              void useSessionStore.getState().terminalControllers[tabId]?.copySelection();
+            }}
+          >
+            <span>Copiar seleccion</span>
+            <span className="text-xs text-[var(--otx-muted)]">Ctrl+Shift+C</span>
+          </button>
+          <button
+            type="button"
+            className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm hover:bg-[var(--otx-brand-soft)]"
+            onClick={() => {
+              setContextMenu(null);
+              void useSessionStore.getState().terminalControllers[tabId]?.paste();
+            }}
+          >
+            <span>Pegar</span>
+            <span className="text-xs text-[var(--otx-muted)]">Ctrl+Shift+V</span>
+          </button>
+          <button
+            type="button"
+            className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm hover:bg-[var(--otx-brand-soft)]"
+            onClick={() => {
+              setContextMenu(null);
+              useSessionStore.getState().terminalControllers[tabId]?.selectAll();
+            }}
+          >
+            <span>Seleccionar todo</span>
+            <span className="text-xs text-[var(--otx-muted)]">Ctrl+Shift+A</span>
+          </button>
+          <button
+            type="button"
+            className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm hover:bg-[var(--otx-brand-soft)]"
+            onClick={() => {
+              setContextMenu(null);
+              useSessionStore.getState().terminalControllers[tabId]?.clear();
+            }}
+          >
+            <span>Limpiar terminal</span>
+            <span className="text-xs text-[var(--otx-muted)]">Ctrl+Shift+K</span>
+          </button>
+          <button
+            type="button"
+            className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm hover:bg-[var(--otx-brand-soft)]"
+            onClick={() => {
+              setContextMenu(null);
+              void useSessionStore.getState().terminalControllers[tabId]?.copyDiagnostics();
+            }}
+          >
+            <span>Copiar diagnostico</span>
+            <span className="text-xs text-[var(--otx-muted)]">Info</span>
+          </button>
+          <button
+            type="button"
+            className="mt-1 flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm text-[var(--otx-brand)] hover:bg-[var(--otx-brand-soft)]"
+            onClick={() => {
+              setContextMenu(null);
+              void useSessionStore.getState().terminalControllers[tabId]?.reconnectNow();
+            }}
+          >
+            <span>Reconectar ahora</span>
+            <span className="text-xs text-[var(--otx-muted)]">Ctrl+Shift+R</span>
+          </button>
+        </div>
+      ) : null}
+    </div>
   );
 }
