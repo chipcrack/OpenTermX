@@ -1,100 +1,80 @@
 # OpenTermX
 
-OpenTermX es una base open source para una app de escritorio tipo terminal manager, inspirada en flujos de trabajo de administración remota pero con identidad propia y arquitectura modular.
+OpenTermX es una aplicacion de escritorio para organizar sesiones remotas, abrir terminales SSH y trabajar con tuneles y archivos desde una sola interfaz.
 
-## Stack
+Esta construida con Tauri 2, React, TypeScript, Rust, `xterm.js` y SQLite local.
 
-- Tauri 2
-- React
-- TypeScript
-- Rust
-- xterm.js
-- SQLite local
-- CSS Modules
+## Que puedes hacer hoy
 
-## MVP actual
+- guardar sesiones de conexion en SQLite local
+- crear, editar y eliminar sesiones desde la interfaz
+- abrir terminales SSH interactivas
+- crear y administrar tuneles por sesion
+- explorar archivos en un panel SFTP
+- guardar credenciales localmente para reutilizarlas
+- usar tema claro y oscuro
 
-El MVP actual ya permite trabajar el flujo local completo y validar conexion SSH real:
+## Descargas e instalacion
 
-- sesiones persistidas en SQLite local
-- CRUD de sesiones desde la interfaz
-- pestañas de terminal mock con `xterm.js`
-- CRUD de túneles por sesión
-- panel SFTP mock con navegación de ruta
-- backend Tauri separado por módulos
-- fallback web con datos en memoria para desarrollo de UI
+Los builds publicados suelen incluir:
 
-## Estado actual
+- macOS: `.app` y `.dmg`
+- Windows: `.msi` y `setup.exe`
+- Linux: `.deb` y, cuando este disponible, `.AppImage`
 
-La app ya incluye:
+### macOS
 
-- cambio de tema claro y oscuro
-- administrador local de credenciales
-- sesiones con autenticacion manual o por credencial guardada
-- terminal SSH interactiva en `xterm.js`
-- explorador SFTP con navegación, orden y acciones básicas
+Por ahora la app se construye sin firma de Apple. Eso significa que macOS puede bloquearla al abrirla por primera vez aunque el archivo sea legitimo.
 
-## Estructura
+Flujo recomendado:
 
-```text
-opentermx/
-├── database/
-│   └── schema.sql
-├── src/
-│   ├── components/
-│   │   ├── layout/
-│   │   ├── sessions/
-│   │   ├── sftp/
-│   │   └── terminal/
-│   ├── pages/
-│   ├── services/
-│   ├── stores/
-│   ├── types/
-│   ├── App.tsx
-│   └── main.tsx
-└── src-tauri/
-    ├── capabilities/
-    ├── src/
-    │   ├── commands/
-    │   ├── models/
-    │   └── storage/
-    └── tauri.conf.json
+1. Descarga el `.dmg`.
+2. Abre el `.dmg`.
+3. Arrastra `OpenTermX.app` a `Applications`.
+4. Si macOS muestra un mensaje tipo "la app esta dañada" o no permite abrirla, abre `Terminal`.
+5. Escribe `xattr -cr ` y, sin presionar Enter todavia, arrastra `OpenTermX.app` a la ventana de Terminal.
+6. Presiona Enter.
+7. Intenta abrir la app de nuevo.
+
+Ejemplo si ya sabes la ruta exacta:
+
+```bash
+xattr -cr /Applications/OpenTermX.app
 ```
 
-## Desarrollo
+Si macOS sigue pidiendo confirmacion, prueba abrirla una primera vez con clic derecho > `Open`.
+
+### Windows
+
+Descarga el instalador `.msi` o `setup.exe` y sigue el asistente.
+
+### Linux
+
+Si tu distribucion es compatible con paquetes Debian, usa el `.deb`.
+
+Si la release incluye `.AppImage`, puedes darle permisos y ejecutarla:
+
+```bash
+chmod +x OpenTermX.AppImage
+./OpenTermX.AppImage
+```
+
+## Ejecutar desde codigo
 
 ### Requisitos
 
-- Node.js `14.18+` o superior
-- npm `6+` o superior
-- Rust + Cargo instalados
-- dependencias del sistema para Tauri 2 según tu OS
+- Node.js `20` o superior
+- npm `9` o superior
+- Rust y Cargo instalados
+- dependencias del sistema para Tauri 2 segun tu sistema operativo
 
-1. Instalar dependencias:
+### Instalar dependencias
 
-   ```bash
-   npm install
-   ```
+```bash
+npm install
+```
 
-2. Ejecutar la app web:
-
-   ```bash
-   npm run dev
-   ```
-
-3. Ejecutar la app Tauri:
-
-   ```bash
-   npm run tauri dev
-   ```
-
-El comando `npm run tauri dev` reutiliza el servidor de Vite si ya lo tienes corriendo en `1420`, así evitamos el choque de puertos.
-
-## Cómo probarlo antes del build
-
-### 1) Probar solo la interfaz web
-
-Usa este modo para revisar layout, tabs, modales, store y navegación mock:
+### Ejecutar la interfaz web
 
 ```bash
 npm run dev
@@ -106,64 +86,38 @@ Luego abre:
 http://localhost:1420
 ```
 
-### 2) Probar la app de escritorio con backend Tauri
-
-Usa este modo para validar:
-
-- comandos Rust
-- persistencia SQLite local
-- CRUD real de sesiones
-- CRUD real de túneles
-- terminal SSH real
-- SFTP real
-
-Ejecuta:
+### Ejecutar la app de escritorio con Tauri
 
 ```bash
 npm run tauri dev
 ```
 
-Si ya dejaste `npm run dev` abierto en otra terminal, `npm run tauri dev` lo reutiliza.
+Si ya tienes `npm run dev` corriendo en otra terminal, `npm run tauri dev` reutiliza ese servidor en el puerto `1420`.
 
-### 3) Flujo recomendado de prueba manual
+## Prueba manual recomendada
 
-Antes de empaquetar para Linux, macOS o Windows, prueba este orden:
+Antes de generar instaladores, conviene probar este flujo:
 
-1. abrir la app
-2. crear una credencial en el administrador
-3. crear una sesión nueva con esa credencial o con usuario y contraseña manual
-4. editar esa sesión
-5. abrir una pestaña de terminal y verificar la autenticacion SSH
-6. crear un túnel asociado si lo necesitas
-7. cerrar y reabrir la app
-8. comprobar que sesiones, credenciales y túneles siguen guardados
-9. cambiar la ruta en el panel SFTP mock y refrescar
+1. Abre la app.
+2. Crea una credencial en el administrador.
+3. Crea una sesion nueva usando esa credencial o usuario y contraseña manual.
+4. Edita la sesion.
+5. Abre una pestaña de terminal y valida la autenticacion SSH.
+6. Crea un tunel si lo necesitas.
+7. Cierra y vuelve a abrir la app.
+8. Comprueba que sesiones, credenciales y tuneles siguen guardados.
+9. Cambia la ruta en el panel SFTP y refresca.
 
-### 4) Si algo falla al correr
+## Si algo falla al ejecutar
 
-- si falla `npm run dev`, revisa que el puerto `1420` no esté ocupado
-- si falla `npm run tauri dev`, revisa que `cargo` y Rust estén instalados
-- si Tauri falla por dependencias del sistema, instala los prerequisitos oficiales para tu SO
+- Si falla `npm run dev`, revisa que el puerto `1420` no este ocupado.
+- Si falla `npm run tauri dev`, revisa que `cargo` y Rust esten instalados.
+- Si Tauri falla por dependencias del sistema, instala los prerequisitos oficiales para tu sistema operativo.
+- Si aparece un error de PostCSS o `tailwindcss`, normalmente faltan dependencias del frontend y se corrige con `npm install`.
 
-## Notas técnicas
+## Compilar instaladores
 
-- el terminal usa `@xterm/xterm` y `@xterm/addon-fit`
-- `xterm` se carga por `dynamic import` para mantener el bundle inicial más liviano
-- los iconos de Tauri viven en `src-tauri/icons/`
-- para regenerarlos desde tu PNG maestro usa:
-
-  ```bash
-  npm run tauri icon src-tauri/icons/icon.png -o src-tauri/icons
-  ```
-
-- Tauri usa `icon.icns` en macOS, `icon.ico` en Windows y PNGs en Linux
-- las credenciales se guardan localmente en SQLite; todavia no estan cifradas
-
-## Build local
-
-### Salida de bundles
-
-Todos los instaladores y bundles quedan en:
+Los bundles se generan en:
 
 ```text
 src-tauri/target/release/bundle/
@@ -180,6 +134,11 @@ Genera:
 
 - `.app`
 - `.dmg`
+
+Importante:
+
+- Este build de macOS no esta firmado.
+- Para abrirlo en otra Mac puede hacer falta ejecutar `xattr -cr` sobre `OpenTermX.app`.
 
 ### Windows
 
@@ -205,27 +164,36 @@ Genera:
 - `.deb`
 - `.AppImage`
 
-## GitHub Actions
+## Publicacion automatica con GitHub Actions
 
-Se agregó un workflow en:
+El workflow esta en:
 
 ```text
 .github/workflows/release.yml
 ```
 
-Este workflow:
+Ese workflow:
 
-- compila en `macOS`, `Windows` y `Ubuntu`
-- crea un draft release en GitHub
+- construye macOS, Windows y Ubuntu
+- publica un draft release en GitHub
 - adjunta los bundles generados por Tauri
+- deja el build de `AppImage` separado para que un fallo externo no bloquee el `.deb`
 
-### Cómo usarlo
+### Como usarlo
 
-1. sube el proyecto a GitHub
-2. crea un tag con formato `v0.1.0`
-3. haz push del tag:
+1. Sube el proyecto a GitHub.
+2. Crea un tag con formato `v0.1.0`.
+3. Haz push del tag.
 
-   ```bash
-   git tag v0.1.0
-   git push origin v0.1.0
-   ```
+```bash
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+## Notas tecnicas
+
+- El terminal usa `@xterm/xterm` y `@xterm/addon-fit`.
+- `xterm` se carga por `dynamic import` para mantener el bundle inicial mas liviano.
+- Los iconos de Tauri estan en `src-tauri/icons/`.
+- Tauri usa `icon.icns` en macOS, `icon.ico` en Windows y PNGs en Linux.
+- Las credenciales se guardan localmente en SQLite y todavia no estan cifradas.

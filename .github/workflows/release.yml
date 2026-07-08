@@ -10,16 +10,24 @@ jobs:
   build:
     permissions:
       contents: write
+    continue-on-error: ${{ matrix.experimental || false }}
     strategy:
       fail-fast: false
       matrix:
         include:
           - platform: macos-latest
             args: --bundles app,dmg
+            bundle_label: macos
           - platform: ubuntu-22.04
-            args: --bundles deb,appimage
+            args: --bundles deb
+            bundle_label: linux-deb
+          - platform: ubuntu-22.04
+            args: --bundles appimage
+            bundle_label: linux-appimage
+            experimental: true
           - platform: windows-latest
             args: --bundles msi,nsis
+            bundle_label: windows
 
     runs-on: ${{ matrix.platform }}
 
@@ -51,6 +59,8 @@ jobs:
             curl \
             wget \
             file \
+            patchelf \
+            xdg-utils \
             libxdo-dev \
             libssl-dev \
             libayatana-appindicator3-dev \
@@ -63,6 +73,21 @@ jobs:
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Para firmar y notarizar macOS en el futuro, descomenta estas variables
+          # y crea los siguientes secrets en GitHub Actions:
+          # APPLE_ID: correo de la cuenta Apple Developer
+          # APPLE_PASSWORD: app-specific password del Apple ID
+          # APPLE_TEAM_ID: Team ID de Apple Developer
+          # APPLE_CERTIFICATE: certificado Developer ID Application exportado en base64
+          # APPLE_CERTIFICATE_PASSWORD: password del archivo .p12
+          # KEYCHAIN_PASSWORD: password temporal para el keychain del runner
+          #
+          # APPLE_ID: ${{ secrets.APPLE_ID }}
+          # APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          # APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          # APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          # APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          # APPLE_SIGNING_IDENTITY: "Developer ID Application: Tu Nombre o Empresa (TEAMID)"
         with:
           tagName: v__VERSION__
           releaseName: OpenTermX v__VERSION__
@@ -70,3 +95,7 @@ jobs:
           releaseDraft: true
           prerelease: false
           args: ${{ matrix.args }}
+
+      # Si más adelante decides firmar macOS, añade antes del paso anterior un bloque
+      # para importar el certificado .p12 al keychain del runner y resolver la identidad
+      # Developer ID Application. Por ahora este workflow construye macOS sin firma.
