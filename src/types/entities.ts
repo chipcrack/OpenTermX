@@ -77,6 +77,7 @@ export interface TerminalTab {
   sessionId: string;
   title: string;
   connected: boolean;
+  reconnecting: boolean;
   shellId: string | null;
 }
 

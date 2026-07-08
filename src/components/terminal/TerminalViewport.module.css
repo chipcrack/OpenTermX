@@ -2,8 +2,9 @@
   position: absolute;
   inset: 0;
   display: flex;
+  min-height: 0;
   overflow: hidden;
-  padding: 0.45rem 0.55rem 0.55rem;
+  padding: 0.45rem 0.55rem 0.9rem;
   background: var(--color-terminal-bg);
 }
 
@@ -21,16 +22,15 @@
 
 .viewport :global(.xterm) {
   flex: 1;
-  min-height: 18rem;
-  height: auto;
+  min-height: 0;
+  height: 100%;
   color: var(--color-text);
   background: var(--color-terminal-bg);
   border-radius: 0.85rem;
 }
 
 .viewport :global(.xterm-screen),
-.viewport :global(.xterm-viewport),
-.viewport :global(.xterm-scroll-area) {
+.viewport :global(.xterm-viewport) {
   background: var(--color-terminal-bg);
 }
 
@@ -41,4 +41,6 @@
 .viewport :global(.xterm-viewport) {
   overflow-y: auto !important;
   overscroll-behavior: contain;
+  box-sizing: border-box;
+  padding-bottom: 0.5rem;
 }

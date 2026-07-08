@@ -33,6 +33,7 @@ interface SessionStore {
   activateTab: (tabId: string) => void;
   closeTab: (tabId: string) => void;
   setTabConnection: (tabId: string, connected: boolean) => void;
+  setTabReconnecting: (tabId: string, reconnecting: boolean) => void;
   setTabShellId: (tabId: string, shellId: string | null) => void;
   toggleSftpPanel: () => void;
   toggleTunnelsPanel: () => void;
@@ -68,6 +69,7 @@ function buildTab(session: Session): TerminalTab {
     sessionId: session.id,
     title: session.name,
     connected: false,
+    reconnecting: false,
     shellId: null
   };
 }
@@ -203,7 +205,16 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
   },
   setTabConnection: (tabId, connected) => {
     set((state) => ({
-      terminalTabs: state.terminalTabs.map((tab) => (tab.id === tabId ? { ...tab, connected } : tab))
+      terminalTabs: state.terminalTabs.map((tab) =>
+        tab.id === tabId ? { ...tab, connected, reconnecting: connected ? false : tab.reconnecting } : tab
+      )
+    }));
+  },
+  setTabReconnecting: (tabId, reconnecting) => {
+    set((state) => ({
+      terminalTabs: state.terminalTabs.map((tab) =>
+        tab.id === tabId ? { ...tab, reconnecting, connected: reconnecting ? false : tab.connected } : tab
+      )
     }));
   },
   setTabShellId: (tabId, shellId) => {

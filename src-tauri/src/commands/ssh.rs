@@ -45,7 +45,7 @@ pub(crate) fn connect_authenticated_session(auth: &SessionAuth) -> Result<Sessio
     .to_socket_addrs()
     .map_err(|error| format!("No se pudo resolver {address}: {error}"))?
     .next()
-    .ok_or_else(|| format!("No se encontró una dirección válida para {address}"))?;
+    .ok_or_else(|| format!("No se encontro una direccion valida para {address}"))?;
 
   let tcp = TcpStream::connect_timeout(&socket_address, Duration::from_secs(8))
     .map_err(|error| format!("No se pudo conectar a {address}: {error}"))?;
@@ -57,10 +57,10 @@ pub(crate) fn connect_authenticated_session(auth: &SessionAuth) -> Result<Sessio
   ssh.handshake()
     .map_err(|error| format!("Handshake SSH fallido: {error}"))?;
   ssh.userauth_password(&auth.username, &auth.password)
-    .map_err(|error| format!("Autenticación SSH fallida: {error}"))?;
+    .map_err(|error| format!("Autenticacion SSH fallida: {error}"))?;
 
   if !ssh.authenticated() {
-    return Err("Autenticación SSH rechazada por el servidor".to_string());
+    return Err("Autenticacion SSH rechazada por el servidor".to_string());
   }
 
   Ok(ssh)
@@ -87,6 +87,7 @@ pub fn open_terminal(
 
   let ssh = connect_authenticated_session(&auth)?;
   ssh.set_timeout(1500);
+  ssh.set_keepalive(true, 30);
 
   let mut channel = ssh
     .channel_session()
@@ -170,6 +171,8 @@ pub fn read_terminal_output(
     });
   };
 
+  let _ = terminal.ssh.keepalive_send();
+
   let mut collected = Vec::new();
   let mut buffer = [0_u8; 4096];
 
@@ -177,7 +180,14 @@ pub fn read_terminal_output(
     match terminal.channel.read(&mut buffer) {
       Ok(0) => break,
       Ok(read) => collected.extend_from_slice(&buffer[..read]),
-      Err(error) if error.kind() == ErrorKind::WouldBlock => break,
+      Err(error)
+        if matches!(
+          error.kind(),
+          ErrorKind::WouldBlock | ErrorKind::TimedOut | ErrorKind::Interrupted
+        ) =>
+      {
+        break;
+      }
       Err(error) => {
         if terminal.channel.eof() {
           break;
@@ -211,22 +221,37 @@ pub fn write_terminal_input(
     .map_err(|_| "No se pudo bloquear el administrador de terminales".to_string())?;
   let terminal = guard
     .get_mut(shell_id)
-    .ok_or_else(|| "La terminal remota ya no está disponible".to_string())?;
+    .ok_or_else(|| "La terminal remota ya no esta disponible".to_string())?;
 
-  let bytes = input.as_bytes();
-  let mut written = 0;
-
-  while written < bytes.len() {
-    match terminal.channel.write(&bytes[written..]) {
-      Ok(0) => break,
-      Ok(size) => written += size,
-      Err(error) if error.kind() == ErrorKind::WouldBlock => break,
-      Err(error) => return Err(format!("No se pudo enviar datos a la terminal remota: {error}")),
-    }
+  if terminal.channel.eof() {
+    return Err("La terminal remota ya no esta disponible".to_string());
   }
 
-  let _ = terminal.channel.flush();
-  Ok(())
+  let _ = terminal.ssh.keepalive_send();
+
+  terminal.ssh.set_blocking(true);
+  terminal.ssh.set_timeout(900);
+
+  let write_result = terminal
+    .channel
+    .write_all(input.as_bytes())
+    .and_then(|_| terminal.channel.flush());
+
+  terminal.ssh.set_blocking(false);
+  terminal.ssh.set_timeout(0);
+
+  match write_result {
+    Ok(()) => Ok(()),
+    Err(error)
+      if matches!(
+        error.kind(),
+        ErrorKind::WouldBlock | ErrorKind::TimedOut | ErrorKind::Interrupted
+      ) && !terminal.channel.eof() =>
+    {
+      Ok(())
+    }
+    Err(error) => Err(format!("No se pudo enviar datos a la terminal remota: {error}")),
+  }
 }
 
 #[tauri::command]
@@ -242,7 +267,7 @@ pub fn resize_terminal(
     .map_err(|_| "No se pudo bloquear el administrador de terminales".to_string())?;
   let terminal = guard
     .get_mut(shell_id)
-    .ok_or_else(|| "La terminal remota ya no está disponible".to_string())?;
+    .ok_or_else(|| "La terminal remota ya no esta disponible".to_string())?;
 
   terminal
     .channel

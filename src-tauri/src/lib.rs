@@ -4,11 +4,24 @@ pub mod storage;
 
 use storage::DatabaseState;
 use commands::ssh::TerminalManager;
-use tauri::Manager;
+use tauri::{Manager, WebviewWindowBuilder};
 
 pub fn run() {
   tauri::Builder::default()
     .setup(|app| {
+      let main_window_config = app
+        .config()
+        .app
+        .windows
+        .iter()
+        .find(|window| window.label == "main")
+        .cloned()
+        .ok_or_else(|| "No se encontro la configuracion de la ventana principal".to_string())?;
+
+      WebviewWindowBuilder::from_config(app, &main_window_config)?
+        .enable_clipboard_access()
+        .build()?;
+
       let database_state =
         DatabaseState::initialize(app.handle()).map_err(|error| -> Box<dyn std::error::Error> {
           Box::new(error)

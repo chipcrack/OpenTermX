@@ -80,6 +80,56 @@ function buildTerminalTheme(themeMode: ThemeMode) {
       };
 }
 
+function describeError(error: unknown) {
+  if (typeof error === 'string' && error.trim()) {
+    return error;
+  }
+
+  if (error instanceof Error && error.message.trim()) {
+    return error.message;
+  }
+
+  return 'error desconocido';
+}
+
+function fitTerminalViewport(container: HTMLDivElement, terminal: any, fitAddon: any) {
+  fitAddon.fit();
+
+  window.requestAnimationFrame(() => {
+    fitAddon.fit();
+
+    window.requestAnimationFrame(() => {
+      const viewport = container.querySelector('.xterm-viewport') as HTMLElement | null;
+      const screen = container.querySelector('.xterm-screen') as HTMLElement | null;
+
+      if (!viewport || !screen || terminal.rows <= 1) {
+        return;
+      }
+
+      const overflow = Math.ceil(
+        screen.getBoundingClientRect().height - viewport.getBoundingClientRect().height
+      );
+
+      if (overflow <= 0) {
+        return;
+      }
+
+      const estimatedRowHeight = screen.getBoundingClientRect().height / terminal.rows;
+      const safeRowHeight = Number.isFinite(estimatedRowHeight) && estimatedRowHeight > 1
+        ? estimatedRowHeight
+        : 1;
+      const rowsToTrim = Math.min(
+        terminal.rows - 1,
+        Math.max(1, Math.ceil(overflow / safeRowHeight))
+      );
+
+      if (rowsToTrim > 0) {
+        terminal.resize(terminal.cols, terminal.rows - rowsToTrim);
+      }
+    });
+  });
+}
+
 export function TerminalViewport({ session, tabId, isActive }: TerminalViewportProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const terminalRef = useRef<any>(null);
@@ -90,12 +140,18 @@ export function TerminalViewport({ session, tabId, isActive }: TerminalViewportP
   const openingRef = useRef(false);
   const pollTimerRef = useRef<number | null>(null);
   const inputFlushTimerRef = useRef<number | null>(null);
+  const reconnectTimerRef = useRef<number | null>(null);
   const resizeObserverRef = useRef<ResizeObserver | null>(null);
   const inputDisposableRef = useRef<{ dispose: () => void } | null>(null);
   const syncTransportLoopRef = useRef<((forceFlush?: boolean) => void) | null>(null);
   const inputBufferRef = useRef('');
   const readingRef = useRef(false);
+  const transportClosedRef = useRef(false);
+  const reconnectAttemptRef = useRef(0);
+  const hasConnectedRef = useRef(false);
+  const manualCloseRef = useRef(false);
   const setTabConnection = useSessionStore((state) => state.setTabConnection);
+  const setTabReconnecting = useSessionStore((state) => state.setTabReconnecting);
   const setTabShellId = useSessionStore((state) => state.setTabShellId);
   const themeMode = useUiStore((state) => state.theme);
 
@@ -106,7 +162,9 @@ export function TerminalViewport({ session, tabId, isActive }: TerminalViewportP
 
     terminalRef.current.options.theme = buildTerminalTheme(themeMode);
     terminalRef.current.refresh(0, Math.max(terminalRef.current.rows - 1, 0));
-    fitAddonRef.current?.fit();
+    if (containerRef.current && fitAddonRef.current) {
+      fitTerminalViewport(containerRef.current, terminalRef.current, fitAddonRef.current);
+    }
 
     if (shellIdRef.current) {
       void desktopApi.resizeTerminal(
@@ -125,7 +183,9 @@ export function TerminalViewport({ session, tabId, isActive }: TerminalViewportP
     }
 
     if (isActive) {
-      fitAddonRef.current?.fit();
+      if (containerRef.current && fitAddonRef.current) {
+        fitTerminalViewport(containerRef.current, terminalRef.current, fitAddonRef.current);
+      }
 
       if (shellIdRef.current) {
         void desktopApi.resizeTerminal(
@@ -145,6 +205,14 @@ export function TerminalViewport({ session, tabId, isActive }: TerminalViewportP
     }
 
     let disposed = false;
+    let detachContextMenuListener: (() => void) | null = null;
+
+    const clearReconnectTimer = () => {
+      if (reconnectTimerRef.current !== null) {
+        window.clearTimeout(reconnectTimerRef.current);
+        reconnectTimerRef.current = null;
+      }
+    };
 
     const clearTransportLoops = () => {
       if (pollTimerRef.current !== null) {
@@ -159,19 +227,28 @@ export function TerminalViewport({ session, tabId, isActive }: TerminalViewportP
     };
 
     const cleanup = () => {
+      manualCloseRef.current = true;
+      clearReconnectTimer();
       clearTransportLoops();
       syncTransportLoopRef.current = null;
+      detachContextMenuListener?.();
+      detachContextMenuListener = null;
       resizeObserverRef.current?.disconnect();
       resizeObserverRef.current = null;
       inputDisposableRef.current?.dispose();
       inputDisposableRef.current = null;
       inputBufferRef.current = '';
       readingRef.current = false;
+      transportClosedRef.current = true;
+      reconnectAttemptRef.current = 0;
+      hasConnectedRef.current = false;
       bootstrappedRef.current = false;
       openingRef.current = false;
 
       if (shellIdRef.current) {
         void desktopApi.closeTerminal(shellIdRef.current);
+        setTabConnection(tabId, false);
+        setTabReconnecting(tabId, false);
         setTabShellId(tabId, null);
         shellIdRef.current = null;
       }
@@ -186,8 +263,6 @@ export function TerminalViewport({ session, tabId, isActive }: TerminalViewportP
         if (disposed || !containerRef.current || bootstrappedRef.current || openingRef.current) {
           return;
         }
-
-        openingRef.current = true;
 
         const terminal = new xtermModule.Terminal({
           cursorBlink: true,
@@ -205,11 +280,13 @@ export function TerminalViewport({ session, tabId, isActive }: TerminalViewportP
         const fitAddon = new fitModule.FitAddon();
         terminal.loadAddon(fitAddon);
         terminal.open(containerRef.current);
-        fitAddon.fit();
+        fitTerminalViewport(containerRef.current, terminal, fitAddon);
 
         terminalRef.current = terminal;
         fitAddonRef.current = fitAddon;
         bootstrappedRef.current = true;
+        manualCloseRef.current = false;
+        transportClosedRef.current = false;
 
         const colors = buildAnsiPalette(themeMode);
         terminal.writeln(
@@ -221,68 +298,52 @@ export function TerminalViewport({ session, tabId, isActive }: TerminalViewportP
         terminal.writeln(`${colors.muted}Preparando terminal interactiva...${colors.reset}`);
         terminal.writeln('');
 
-        const flushRemoteOutput = async () => {
-          if (!shellIdRef.current || !terminalRef.current || readingRef.current) {
-            return;
-          }
-
-          readingRef.current = true;
-
-          try {
-            const output = await desktopApi.readTerminalOutput(shellIdRef.current);
-
-            if (disposed || !terminalRef.current) {
-              readingRef.current = false;
-              return;
-            }
-
-            if (output.data) {
-              terminalRef.current.write(output.data);
-            }
-
-            if (output.closed) {
-              setTabConnection(tabId, false);
-              setTabShellId(tabId, null);
-              shellIdRef.current = null;
-              clearTransportLoops();
-            }
-          } catch (error) {
-            if (!disposed && terminalRef.current) {
-              terminalRef.current.writeln('');
-              terminalRef.current.writeln(
-                `Error de lectura: ${error instanceof Error ? error.message : 'error desconocido'}`
-              );
-              setTabConnection(tabId, false);
-            }
-          } finally {
-            readingRef.current = false;
+        const writeStatusLine = (message: string) => {
+          if (!disposed && terminalRef.current) {
+            terminalRef.current.writeln('');
+            terminalRef.current.writeln(message);
           }
         };
 
-        const flushInputBuffer = async () => {
-          if (!shellIdRef.current || !inputBufferRef.current) {
-            return;
+        const copySelectionToClipboard = async () => {
+          const currentTerminal = terminalRef.current;
+          const selection = currentTerminal?.getSelection?.();
+
+          if (!selection) {
+            return false;
           }
 
-          const payload = inputBufferRef.current;
-          inputBufferRef.current = '';
-
           try {
-            await desktopApi.writeTerminalInput(shellIdRef.current, payload);
+            await navigator.clipboard.writeText(selection);
+            return true;
           } catch (error) {
-            inputBufferRef.current = payload + inputBufferRef.current;
-
-            if (!disposed && terminalRef.current) {
-              terminalRef.current.writeln('');
-              terminalRef.current.writeln(
-                `Error de escritura: ${error instanceof Error ? error.message : 'error desconocido'}`
-              );
-              setTabConnection(tabId, false);
-            }
+            writeStatusLine(`Error al copiar: ${describeError(error)}`);
+            return false;
           }
         };
 
-        syncTransportLoopRef.current = (forceFlush = false) => {
+        const pasteClipboardIntoTerminal = async () => {
+          if (!terminalRef.current || !shellIdRef.current || transportClosedRef.current) {
+            return false;
+          }
+
+          try {
+            const text = await navigator.clipboard.readText();
+
+            if (!text) {
+              return false;
+            }
+
+            terminalRef.current.paste(text);
+            terminalRef.current.focus();
+            return true;
+          } catch (error) {
+            writeStatusLine(`Error al pegar: ${describeError(error)}`);
+            return false;
+          }
+        };
+
+        const syncTransportLoops = (forceFlush = false) => {
           clearTransportLoops();
 
           if (!shellIdRef.current) {
@@ -304,62 +365,280 @@ export function TerminalViewport({ session, tabId, isActive }: TerminalViewportP
           }
         };
 
-        try {
-          const result = await desktopApi.bootstrapTerminal(session.id, terminal.cols, terminal.rows);
-
-          if (disposed) {
-            cleanup();
+        const scheduleReconnect = (message?: string) => {
+          if (
+            disposed ||
+            manualCloseRef.current ||
+            reconnectTimerRef.current !== null ||
+            openingRef.current
+          ) {
             return;
           }
 
-          shellIdRef.current = result.shellId;
-          setTabShellId(tabId, result.shellId);
-          terminal.writeln('');
-          terminal.writeln(`${colors.success}${result.banner}${colors.reset}`);
-          terminal.writeln(`${colors.success}Estado de conexion: en linea${colors.reset}`);
-          {/*terminal.writeln(`${colors.muted}Tip: usa comandos normales como ls, pwd, cd o clear.${colors.reset}`);*/}
-          terminal.writeln('');
-          setTabConnection(tabId, result.connected);
+          reconnectAttemptRef.current += 1;
+          setTabConnection(tabId, false);
+          setTabReconnecting(tabId, true);
 
-          if (result.connected && result.initialOutput) {
-            terminal.write(result.initialOutput);
+          const delay = Math.min(1000 * 2 ** Math.min(reconnectAttemptRef.current - 1, 3), 8000);
+
+          if (message) {
+            writeStatusLine(message);
           }
 
-          inputDisposableRef.current = terminal.onData((input: string) => {
-            if (!shellIdRef.current) {
+          writeStatusLine(
+            `${colors.muted}Conexion interrumpida. Reintentando en ${Math.round(delay / 1000)} s...${colors.reset}`
+          );
+
+          reconnectTimerRef.current = window.setTimeout(() => {
+            reconnectTimerRef.current = null;
+
+            if (disposed || manualCloseRef.current || !terminalRef.current) {
               return;
             }
 
-            inputBufferRef.current += input;
-          });
+            void startTerminalSession(true);
+          }, delay);
+        };
 
-          syncTransportLoopRef.current?.(true);
+        const closeTransport = ({
+          message,
+          shouldReconnect = false
+        }: {
+          message?: string;
+          shouldReconnect?: boolean;
+        } = {}) => {
+          if (transportClosedRef.current && !shellIdRef.current) {
+            if (shouldReconnect) {
+              scheduleReconnect(message);
+            } else if (message) {
+              writeStatusLine(message);
+            }
+            return;
+          }
 
-          resizeObserverRef.current = new ResizeObserver(() => {
-            if (!isActiveRef.current) {
+          transportClosedRef.current = true;
+          clearTransportLoops();
+          inputBufferRef.current = '';
+          readingRef.current = false;
+
+          const shellId = shellIdRef.current;
+          shellIdRef.current = null;
+          setTabConnection(tabId, false);
+          setTabShellId(tabId, null);
+
+          if (shellId) {
+            void desktopApi.closeTerminal(shellId).catch(() => undefined);
+          }
+
+          if (shouldReconnect) {
+            scheduleReconnect(message);
+            return;
+          }
+
+          setTabReconnecting(tabId, false);
+
+          if (message) {
+            writeStatusLine(message);
+          }
+        };
+
+        const startTerminalSession = async (isReconnect = false) => {
+          if (disposed || manualCloseRef.current || openingRef.current || !terminalRef.current) {
+            return;
+          }
+
+          openingRef.current = true;
+
+          if (isReconnect) {
+            writeStatusLine(`${colors.info}Intentando reconectar la sesion SSH...${colors.reset}`);
+          }
+
+          try {
+            const result = await desktopApi.bootstrapTerminal(session.id, terminal.cols, terminal.rows);
+
+            if (disposed || manualCloseRef.current) {
+              if (result.shellId) {
+                void desktopApi.closeTerminal(result.shellId).catch(() => undefined);
+              }
               return;
             }
 
-            fitAddon.fit();
+            clearReconnectTimer();
+            reconnectAttemptRef.current = 0;
+            shellIdRef.current = result.shellId;
+            transportClosedRef.current = !result.connected;
+            setTabShellId(tabId, result.shellId);
+            setTabConnection(tabId, result.connected);
+            setTabReconnecting(tabId, false);
 
-            if (shellIdRef.current) {
-              void desktopApi.resizeTerminal(shellIdRef.current, terminal.cols, terminal.rows);
-            }
-          });
-          resizeObserverRef.current.observe(containerRef.current);
-        } catch (error) {
-          if (!disposed) {
             terminal.writeln('');
-            terminal.writeln(
-              `Error de arranque: ${error instanceof Error ? error.message : 'error desconocido'}`
-            );
-            terminal.write('$ ');
+            terminal.writeln(`${colors.success}${result.banner}${colors.reset}`);
+            terminal.writeln(`${colors.success}Estado de conexion: en linea${colors.reset}`);
+            if (isReconnect) {
+              terminal.writeln(
+                `${colors.success}SSH reconectado${colors.reset} ${colors.muted}- se conservo el historial visible, verifica el contexto remoto${colors.reset}`
+              );
+            }
+            terminal.writeln('');
+
+            if (result.connected) {
+              hasConnectedRef.current = true;
+            }
+
+            if (result.connected && result.initialOutput) {
+              terminal.write(result.initialOutput);
+            }
+
+            syncTransportLoops(true);
+          } catch (error) {
             setTabConnection(tabId, false);
             setTabShellId(tabId, null);
+
+            if (hasConnectedRef.current && !disposed && !manualCloseRef.current) {
+              scheduleReconnect(`Error de reconexion: ${describeError(error)}`);
+            } else if (!disposed) {
+              setTabReconnecting(tabId, false);
+              writeStatusLine(`Error de arranque: ${describeError(error)}`);
+              terminal.write('$ ');
+            }
+          } finally {
+            openingRef.current = false;
           }
-        } finally {
-          openingRef.current = false;
-        }
+        };
+
+        const flushRemoteOutput = async () => {
+          if (
+            !shellIdRef.current ||
+            !terminalRef.current ||
+            readingRef.current ||
+            transportClosedRef.current
+          ) {
+            return;
+          }
+
+          readingRef.current = true;
+
+          try {
+            const output = await desktopApi.readTerminalOutput(shellIdRef.current);
+
+            if (disposed || !terminalRef.current) {
+              readingRef.current = false;
+              return;
+            }
+
+            if (output.data) {
+              terminalRef.current.write(output.data);
+            }
+
+            if (output.closed) {
+              closeTransport({ shouldReconnect: hasConnectedRef.current });
+            }
+          } catch (error) {
+            closeTransport({
+              message: `Error de lectura: ${describeError(error)}`,
+              shouldReconnect: hasConnectedRef.current
+            });
+          } finally {
+            readingRef.current = false;
+          }
+        };
+
+        const flushInputBuffer = async () => {
+          if (!shellIdRef.current || !inputBufferRef.current || transportClosedRef.current) {
+            return;
+          }
+
+          const payload = inputBufferRef.current;
+          inputBufferRef.current = '';
+
+          try {
+            await desktopApi.writeTerminalInput(shellIdRef.current, payload);
+          } catch (error) {
+            closeTransport({
+              message: `Error de escritura: ${describeError(error)}`,
+              shouldReconnect: hasConnectedRef.current
+            });
+          }
+        };
+
+        syncTransportLoopRef.current = syncTransportLoops;
+
+        terminal.attachCustomKeyEventHandler((event: KeyboardEvent) => {
+          const isModifier = event.ctrlKey || event.metaKey;
+          const key = event.key.toLowerCase();
+
+          if (isModifier && key === 'v') {
+            event.preventDefault();
+            void pasteClipboardIntoTerminal();
+            return false;
+          }
+
+          if (isModifier && key === 'c' && terminal.hasSelection()) {
+            event.preventDefault();
+            void copySelectionToClipboard();
+            return false;
+          }
+
+          if (isModifier && event.shiftKey && key === 'c') {
+            event.preventDefault();
+            void copySelectionToClipboard();
+            return false;
+          }
+
+          if (event.shiftKey && key === 'insert') {
+            event.preventDefault();
+            void pasteClipboardIntoTerminal();
+            return false;
+          }
+
+          return true;
+        });
+
+        const handleTerminalContextMenu = (event: MouseEvent) => {
+          event.preventDefault();
+
+          if (terminal.hasSelection()) {
+            void copySelectionToClipboard().then((copied) => {
+              if (copied) {
+                terminal.clearSelection();
+                terminal.focus();
+              }
+            });
+            return;
+          }
+
+          void pasteClipboardIntoTerminal();
+        };
+
+        containerRef.current.addEventListener('contextmenu', handleTerminalContextMenu);
+        detachContextMenuListener = () => {
+          containerRef.current?.removeEventListener('contextmenu', handleTerminalContextMenu);
+        };
+
+        inputDisposableRef.current = terminal.onData((input: string) => {
+          if (!shellIdRef.current || transportClosedRef.current) {
+            return;
+          }
+
+          inputBufferRef.current += input;
+        });
+
+        terminal.focus();
+
+        resizeObserverRef.current = new ResizeObserver(() => {
+          if (!isActiveRef.current) {
+            return;
+          }
+
+          fitTerminalViewport(containerRef.current!, terminal, fitAddon);
+
+          if (shellIdRef.current) {
+            void desktopApi.resizeTerminal(shellIdRef.current, terminal.cols, terminal.rows);
+          }
+        });
+        resizeObserverRef.current.observe(containerRef.current);
+
+        void startTerminalSession(false);
       }
     );
 
@@ -367,7 +646,7 @@ export function TerminalViewport({ session, tabId, isActive }: TerminalViewportP
       disposed = true;
       cleanup();
     };
-  }, [session.id, setTabConnection, setTabShellId, tabId]);
+  }, [session.id, setTabConnection, setTabReconnecting, setTabShellId, tabId]);
 
   return (
     <div

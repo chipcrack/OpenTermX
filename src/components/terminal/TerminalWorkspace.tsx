@@ -25,11 +25,17 @@ export function TerminalWorkspace() {
   );
 
   const activeTab = terminalTabs.find((tab) => tab.id === activeTabId);
-  const statusLabel = activeTab?.connected ? 'SSH activo' : activeSession ? 'Pendiente' : 'Sin iniciar';
+  const statusLabel = activeTab?.reconnecting
+    ? 'Reconectando'
+    : activeTab?.connected
+      ? 'SSH activo'
+      : activeSession
+        ? 'Pendiente'
+        : 'Sin iniciar';
 
   return (
-    <section className="flex h-full flex-col gap-3 overflow-y-auto p-3">
-      <header className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+    <section className="flex h-full min-h-0 flex-col gap-3 overflow-hidden p-3 max-lg:overflow-y-auto">
+      <header className="shrink-0 flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
         <div>
           <p className="otx-kicker m-0">Workspace</p>
           <h2 className="mt-1.5 text-lg font-semibold">{activeSession?.name ?? 'Sin sesion activa'}</h2>
@@ -52,7 +58,7 @@ export function TerminalWorkspace() {
         </div>
       </header>
 
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="shrink-0 flex flex-wrap items-center gap-2">
         <div className="otx-panel-muted flex items-center gap-2 px-3 py-2">
           <span className="text-[10px] uppercase tracking-[0.18em] text-[var(--otx-muted)]">Pestanas</span>
           <strong className="text-sm font-semibold">{terminalTabs.length}</strong>
@@ -67,10 +73,10 @@ export function TerminalWorkspace() {
         </div>
       </div>
 
-      <div className="flex min-h-[21rem] flex-[0_1_auto] flex-col overflow-hidden rounded-[22px] border border-[var(--otx-border)] bg-[var(--otx-terminal)] shadow-shell max-lg:max-h-[58vh] lg:max-h-[62vh] xl:max-h-[68vh]">
+      <div className="flex min-h-[21rem] flex-1 flex-col overflow-hidden rounded-[22px] border border-[var(--otx-border)] bg-[var(--otx-terminal)] shadow-shell max-lg:min-h-[24rem]">
         <TerminalTabs />
         {terminalTabs.length > 0 ? (
-          <div className="relative flex-1 overflow-hidden">
+          <div className="relative min-h-0 flex-1 overflow-hidden">
             {terminalTabs.map((tab) => {
               const session = sessions.find((item) => item.id === tab.sessionId);
               if (!session) {
