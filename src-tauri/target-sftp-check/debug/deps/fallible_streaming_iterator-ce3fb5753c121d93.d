@@ -1,0 +1,5 @@
+D:\OpenTermX\src-tauri\target-sftp-check\debug\deps\fallible_streaming_iterator-ce3fb5753c121d93.d: C:\Users\Angelo\ Lopez\ Torrico\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\fallible-streaming-iterator-0.1.9\src\lib.rs
+
+D:\OpenTermX\src-tauri\target-sftp-check\debug\deps\libfallible_streaming_iterator-ce3fb5753c121d93.rmeta: C:\Users\Angelo\ Lopez\ Torrico\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\fallible-streaming-iterator-0.1.9\src\lib.rs
+
+C:\Users\Angelo\ Lopez\ Torrico\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\fallible-streaming-iterator-0.1.9\src\lib.rs:

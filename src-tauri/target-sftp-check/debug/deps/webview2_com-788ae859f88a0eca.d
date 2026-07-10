@@ -1,0 +1,8 @@
+D:\OpenTermX\src-tauri\target-sftp-check\debug\deps\webview2_com-788ae859f88a0eca.d: C:\Users\Angelo\ Lopez\ Torrico\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\webview2-com-0.38.2\src\lib.rs C:\Users\Angelo\ Lopez\ Torrico\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\webview2-com-0.38.2\src\callback.rs C:\Users\Angelo\ Lopez\ Torrico\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\webview2-com-0.38.2\src\options.rs C:\Users\Angelo\ Lopez\ Torrico\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\webview2-com-0.38.2\src\pwstr.rs
+
+D:\OpenTermX\src-tauri\target-sftp-check\debug\deps\libwebview2_com-788ae859f88a0eca.rmeta: C:\Users\Angelo\ Lopez\ Torrico\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\webview2-com-0.38.2\src\lib.rs C:\Users\Angelo\ Lopez\ Torrico\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\webview2-com-0.38.2\src\callback.rs C:\Users\Angelo\ Lopez\ Torrico\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\webview2-com-0.38.2\src\options.rs C:\Users\Angelo\ Lopez\ Torrico\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\webview2-com-0.38.2\src\pwstr.rs
+
+C:\Users\Angelo\ Lopez\ Torrico\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\webview2-com-0.38.2\src\lib.rs:
+C:\Users\Angelo\ Lopez\ Torrico\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\webview2-com-0.38.2\src\callback.rs:
+C:\Users\Angelo\ Lopez\ Torrico\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\webview2-com-0.38.2\src\options.rs:
+C:\Users\Angelo\ Lopez\ Torrico\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\webview2-com-0.38.2\src\pwstr.rs:

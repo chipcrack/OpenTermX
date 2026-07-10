@@ -240,6 +240,7 @@ export function SftpPanel() {
     if (!activeSessionId) {
       setEntries([]);
       setSelectedPath(null);
+      setError(null);
       return;
     }
 
@@ -666,7 +667,7 @@ export function SftpPanel() {
         <button
           type="button"
           onClick={() => void handleDownload()}
-          disabled={!selectedEntry || selectedEntry.type !== 'file' || loading || downloading}
+          disabled={!activeSession || !selectedEntry || selectedEntry.type !== 'file' || loading || downloading}
           title="Descargar seleccionado"
         >
           {downloading ? 'Descargando...' : 'Descargar'}
@@ -674,10 +675,10 @@ export function SftpPanel() {
         <button type="button" onClick={handleNewFolder} disabled={!activeSession || loading} title="Nueva carpeta">
           Carpeta
         </button>
-        <button type="button" onClick={handleRename} disabled={!selectedEntry || loading} title="Renombrar seleccionado">
+        <button type="button" onClick={handleRename} disabled={!activeSession || !selectedEntry || loading} title="Renombrar seleccionado">
           Renombrar
         </button>
-        <button type="button" onClick={handleDelete} disabled={!selectedEntry || loading} title="Eliminar seleccionado">
+        <button type="button" onClick={handleDelete} disabled={!activeSession || !selectedEntry || loading} title="Eliminar seleccionado">
           Eliminar
         </button>
         <label className={styles.hiddenToggle}>

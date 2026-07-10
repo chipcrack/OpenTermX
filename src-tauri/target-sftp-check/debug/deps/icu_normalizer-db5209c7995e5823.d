@@ -1,0 +1,8 @@
+D:\OpenTermX\src-tauri\target-sftp-check\debug\deps\icu_normalizer-db5209c7995e5823.d: C:\Users\Angelo\ Lopez\ Torrico\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\icu_normalizer-2.2.0\src\lib.rs C:\Users\Angelo\ Lopez\ Torrico\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\icu_normalizer-2.2.0\src\properties.rs C:\Users\Angelo\ Lopez\ Torrico\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\icu_normalizer-2.2.0\src\provider.rs C:\Users\Angelo\ Lopez\ Torrico\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\icu_normalizer-2.2.0\src\uts46.rs
+
+D:\OpenTermX\src-tauri\target-sftp-check\debug\deps\libicu_normalizer-db5209c7995e5823.rmeta: C:\Users\Angelo\ Lopez\ Torrico\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\icu_normalizer-2.2.0\src\lib.rs C:\Users\Angelo\ Lopez\ Torrico\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\icu_normalizer-2.2.0\src\properties.rs C:\Users\Angelo\ Lopez\ Torrico\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\icu_normalizer-2.2.0\src\provider.rs C:\Users\Angelo\ Lopez\ Torrico\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\icu_normalizer-2.2.0\src\uts46.rs
+
+C:\Users\Angelo\ Lopez\ Torrico\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\icu_normalizer-2.2.0\src\lib.rs:
+C:\Users\Angelo\ Lopez\ Torrico\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\icu_normalizer-2.2.0\src\properties.rs:
+C:\Users\Angelo\ Lopez\ Torrico\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\icu_normalizer-2.2.0\src\provider.rs:
+C:\Users\Angelo\ Lopez\ Torrico\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\icu_normalizer-2.2.0\src\uts46.rs:

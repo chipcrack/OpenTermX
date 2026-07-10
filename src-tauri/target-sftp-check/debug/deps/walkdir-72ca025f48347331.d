@@ -1,0 +1,10 @@
+D:\OpenTermX\src-tauri\target-sftp-check\debug\deps\walkdir-72ca025f48347331.d: C:\Users\Angelo\ Lopez\ Torrico\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\walkdir-2.5.0\src\lib.rs C:\Users\Angelo\ Lopez\ Torrico\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\walkdir-2.5.0\src\dent.rs C:\Users\Angelo\ Lopez\ Torrico\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\walkdir-2.5.0\src\error.rs C:\Users\Angelo\ Lopez\ Torrico\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\walkdir-2.5.0\src\util.rs
+
+D:\OpenTermX\src-tauri\target-sftp-check\debug\deps\libwalkdir-72ca025f48347331.rlib: C:\Users\Angelo\ Lopez\ Torrico\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\walkdir-2.5.0\src\lib.rs C:\Users\Angelo\ Lopez\ Torrico\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\walkdir-2.5.0\src\dent.rs C:\Users\Angelo\ Lopez\ Torrico\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\walkdir-2.5.0\src\error.rs C:\Users\Angelo\ Lopez\ Torrico\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\walkdir-2.5.0\src\util.rs
+
+D:\OpenTermX\src-tauri\target-sftp-check\debug\deps\libwalkdir-72ca025f48347331.rmeta: C:\Users\Angelo\ Lopez\ Torrico\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\walkdir-2.5.0\src\lib.rs C:\Users\Angelo\ Lopez\ Torrico\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\walkdir-2.5.0\src\dent.rs C:\Users\Angelo\ Lopez\ Torrico\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\walkdir-2.5.0\src\error.rs C:\Users\Angelo\ Lopez\ Torrico\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\walkdir-2.5.0\src\util.rs
+
+C:\Users\Angelo\ Lopez\ Torrico\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\walkdir-2.5.0\src\lib.rs:
+C:\Users\Angelo\ Lopez\ Torrico\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\walkdir-2.5.0\src\dent.rs:
+C:\Users\Angelo\ Lopez\ Torrico\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\walkdir-2.5.0\src\error.rs:
+C:\Users\Angelo\ Lopez\ Torrico\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\walkdir-2.5.0\src\util.rs:

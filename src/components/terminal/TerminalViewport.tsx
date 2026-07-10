@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import '@xterm/xterm/css/xterm.css';
 import { desktopApi } from '../../services/desktopApi';
+import { isTauriRuntime } from '../../services/runtime';
 import { useSessionStore } from '../../stores/sessionStore';
 import { useUiStore } from '../../stores/uiStore';
 import type { Session, ThemeMode } from '../../types/entities';
@@ -202,6 +203,19 @@ function revealTerminalMatch(terminal: any, match: SearchMatch | undefined) {
   return true;
 }
 
+function toControlCharacter(key: string) {
+  if (key.length !== 1) {
+    return null;
+  }
+
+  const code = key.toUpperCase().charCodeAt(0);
+  if (code < 65 || code > 90) {
+    return null;
+  }
+
+  return String.fromCharCode(code - 64);
+}
+
 export function TerminalViewport({ session, tabId, isActive }: TerminalViewportProps) {
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -217,6 +231,9 @@ export function TerminalViewport({ session, tabId, isActive }: TerminalViewportP
   const resizeObserverRef = useRef<ResizeObserver | null>(null);
   const inputDisposableRef = useRef<{ dispose: () => void } | null>(null);
   const syncTransportLoopRef = useRef<((forceFlush?: boolean) => void) | null>(null);
+  const streamOutputModeRef = useRef(false);
+  const streamOutputUnlistenRef = useRef<(() => void) | null>(null);
+  const streamCloseUnlistenRef = useRef<(() => void) | null>(null);
   const inputBufferRef = useRef('');
   const readingRef = useRef(false);
   const transportClosedRef = useRef(false);
@@ -326,6 +343,11 @@ export function TerminalViewport({ session, tabId, isActive }: TerminalViewportP
       resizeObserverRef.current = null;
       inputDisposableRef.current?.dispose();
       inputDisposableRef.current = null;
+      streamOutputUnlistenRef.current?.();
+      streamOutputUnlistenRef.current = null;
+      streamCloseUnlistenRef.current?.();
+      streamCloseUnlistenRef.current = null;
+      streamOutputModeRef.current = false;
       inputBufferRef.current = '';
       readingRef.current = false;
       transportClosedRef.current = true;
@@ -410,6 +432,13 @@ export function TerminalViewport({ session, tabId, isActive }: TerminalViewportP
 
         const updateStatus = (statusText: string, lastError?: string | null) => {
           setTabStatus(tabId, statusText, lastError);
+        };
+
+        const teardownTerminalStreamListeners = () => {
+          streamOutputUnlistenRef.current?.();
+          streamOutputUnlistenRef.current = null;
+          streamCloseUnlistenRef.current?.();
+          streamCloseUnlistenRef.current = null;
         };
 
         const copySelectionToClipboard = async () => {
@@ -567,9 +596,11 @@ export function TerminalViewport({ session, tabId, isActive }: TerminalViewportP
             return;
           }
 
-          pollTimerRef.current = window.setInterval(() => {
-            void flushRemoteOutput();
-          }, isActiveRef.current ? 55 : 240);
+          if (!streamOutputModeRef.current) {
+            pollTimerRef.current = window.setInterval(() => {
+              void flushRemoteOutput();
+            }, isActiveRef.current ? 55 : 240);
+          }
 
           if (isActiveRef.current) {
             inputFlushTimerRef.current = window.setInterval(() => {
@@ -578,7 +609,9 @@ export function TerminalViewport({ session, tabId, isActive }: TerminalViewportP
           }
 
           if (forceFlush) {
-            void flushRemoteOutput();
+            if (!streamOutputModeRef.current) {
+              void flushRemoteOutput();
+            }
           }
         };
 
@@ -640,6 +673,8 @@ export function TerminalViewport({ session, tabId, isActive }: TerminalViewportP
           readingRef.current = false;
 
           const shellId = shellIdRef.current;
+          streamOutputModeRef.current = false;
+          teardownTerminalStreamListeners();
           shellIdRef.current = null;
           setTabConnection(tabId, false);
           setTabShellId(tabId, null);
@@ -661,12 +696,56 @@ export function TerminalViewport({ session, tabId, isActive }: TerminalViewportP
           }
         };
 
+        const setupTerminalStreamListeners = async (shellId: string) => {
+          if (!isTauriRuntime()) {
+            return false;
+          }
+
+          try {
+            teardownTerminalStreamListeners();
+            const { listen } = await import('@tauri-apps/api/event');
+
+            streamOutputUnlistenRef.current = await listen<number[]>(
+              `ssh-output-${shellId}`,
+              (event) => {
+                if (
+                  shellId !== shellIdRef.current ||
+                  !streamOutputModeRef.current ||
+                  !terminalRef.current ||
+                  transportClosedRef.current
+                ) {
+                  return;
+                }
+
+                terminalRef.current.write(new Uint8Array(event.payload));
+              }
+            );
+
+            streamCloseUnlistenRef.current = await listen<boolean>(
+              `ssh-closed-${shellId}`,
+              () => {
+                if (shellId !== shellIdRef.current || transportClosedRef.current) {
+                  return;
+                }
+
+                closeTransport({ shouldReconnect: hasConnectedRef.current });
+              }
+            );
+
+            return true;
+          } catch {
+            teardownTerminalStreamListeners();
+            return false;
+          }
+        };
+
         const startTerminalSession = async (isReconnect = false) => {
           if (disposed || manualCloseRef.current || openingRef.current || !terminalRef.current) {
             return;
           }
 
           openingRef.current = true;
+          streamOutputModeRef.current = false;
 
           if (isReconnect) {
             writeStatusLine(`${colors.info}Intentando reconectar la sesion SSH...${colors.reset}`);
@@ -708,6 +787,25 @@ export function TerminalViewport({ session, tabId, isActive }: TerminalViewportP
 
             if (result.connected && result.initialOutput) {
               terminal.write(result.initialOutput);
+            }
+
+            if (result.connected && await setupTerminalStreamListeners(result.shellId)) {
+              try {
+                const pendingOutput = await desktopApi.enableTerminalStream(result.shellId);
+
+                if (pendingOutput.data) {
+                  terminal.write(pendingOutput.data);
+                }
+
+                if (pendingOutput.closed) {
+                  closeTransport({ shouldReconnect: hasConnectedRef.current });
+                } else {
+                  streamOutputModeRef.current = true;
+                }
+              } catch {
+                streamOutputModeRef.current = false;
+                teardownTerminalStreamListeners();
+              }
             }
 
             syncTransportLoops(true);
@@ -854,6 +952,25 @@ export function TerminalViewport({ session, tabId, isActive }: TerminalViewportP
             event.preventDefault();
             void copySelectionToClipboard();
             return false;
+          }
+
+          if (
+            event.ctrlKey &&
+            !event.metaKey &&
+            !event.altKey &&
+            !event.shiftKey &&
+            terminalRef.current &&
+            shellIdRef.current &&
+            !transportClosedRef.current
+          ) {
+            const controlCharacter = toControlCharacter(key);
+
+            if (controlCharacter) {
+              event.preventDefault();
+              inputBufferRef.current += controlCharacter;
+              void flushInputBuffer();
+              return false;
+            }
           }
 
           return true;

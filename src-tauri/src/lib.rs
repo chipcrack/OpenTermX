@@ -4,6 +4,7 @@ pub mod storage;
 
 use storage::DatabaseState;
 use commands::ssh::TerminalManager;
+use commands::sftp::SftpManager;
 use tauri::{Manager, WebviewWindowBuilder};
 
 pub fn run() {
@@ -29,6 +30,7 @@ pub fn run() {
 
       app.manage(database_state);
       app.manage(TerminalManager::default());
+      app.manage(SftpManager::default());
       Ok(())
     })
     .invoke_handler(tauri::generate_handler![
@@ -42,6 +44,7 @@ pub fn run() {
       commands::tunnel::save_tunnel,
       commands::tunnel::delete_tunnel,
       commands::ssh::open_terminal,
+      commands::ssh::enable_terminal_stream,
       commands::ssh::read_terminal_output,
       commands::ssh::write_terminal_input,
       commands::ssh::resize_terminal,

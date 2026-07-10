@@ -246,6 +246,14 @@ export const desktopApi = {
     shell.buffer = '';
     return Promise.resolve({ data, closed: false });
   },
+  async enableTerminalStream(shellId: string) {
+    if (isTauriRuntime()) {
+      return invoke<TerminalOutput>('enable_terminal_stream', { shellId });
+    }
+
+    const shell = shellMemory.get(shellId);
+    return Promise.resolve({ data: shell?.buffer ?? '', closed: !shell });
+  },
   async writeTerminalInput(shellId: string, input: string) {
     if (isTauriRuntime()) {
       return invoke<void>('write_terminal_input', { shellId, input });
@@ -280,9 +288,9 @@ export const desktopApi = {
     shellMemory.delete(shellId);
     return Promise.resolve();
   },
-  async listDirectory(sessionId: string, path?: string) {
+  async listDirectory(sessionId: string, path?: string, shellId?: string | null) {
     if (isTauriRuntime()) {
-      return invoke<SftpEntry[]>('list_directory', { sessionId, path });
+      return invoke<SftpEntry[]>('list_directory', { sessionId, path, shellId });
     }
 
     const baseEntries = sftpMemory[sessionId] ?? [];
@@ -302,9 +310,9 @@ export const desktopApi = {
         })
     );
   },
-  async createDirectory(sessionId: string, path: string) {
+  async createDirectory(sessionId: string, path: string, shellId?: string | null) {
     if (isTauriRuntime()) {
-      return invoke<void>('create_directory', { sessionId, path });
+      return invoke<void>('create_directory', { sessionId, path, shellId });
     }
 
     const normalizedPath = normalizeRemotePath(path);
@@ -326,9 +334,9 @@ export const desktopApi = {
     sftpMemory[sessionId] = [nextEntry, ...(sftpMemory[sessionId] ?? [])];
     return Promise.resolve();
   },
-  async renameEntry(sessionId: string, fromPath: string, toPath: string) {
+  async renameEntry(sessionId: string, fromPath: string, toPath: string, shellId?: string | null) {
     if (isTauriRuntime()) {
-      return invoke<void>('rename_entry', { sessionId, fromPath, toPath });
+      return invoke<void>('rename_entry', { sessionId, fromPath, toPath, shellId });
     }
 
     const entries = sftpMemory[sessionId] ?? [];
@@ -384,9 +392,9 @@ export const desktopApi = {
 
     return Promise.resolve();
   },
-  async deleteEntry(sessionId: string, path: string, entryType: SftpEntry['type']) {
+  async deleteEntry(sessionId: string, path: string, entryType: SftpEntry['type'], shellId?: string | null) {
     if (isTauriRuntime()) {
-      return invoke<void>('delete_entry', { sessionId, path, entryType });
+      return invoke<void>('delete_entry', { sessionId, path, entryType, shellId });
     }
 
     const normalizedPath = normalizeRemotePath(path);
@@ -414,10 +422,11 @@ export const desktopApi = {
 
     return Promise.resolve();
   },
-  async uploadFile(sessionId: string, remotePath: string, contents: Uint8Array) {
+  async uploadFile(sessionId: string, remotePath: string, contents: Uint8Array, shellId?: string | null) {
     if (isTauriRuntime()) {
       return invoke<void>('upload_file', {
         sessionId,
+        shellId,
         remotePath,
         contents: Array.from(contents)
       });
@@ -444,9 +453,9 @@ export const desktopApi = {
     sftpFileMemory.set(getSftpFileKey(sessionId, normalizedPath), new Uint8Array(contents));
     return Promise.resolve();
   },
-  async downloadFile(sessionId: string, path: string) {
+  async downloadFile(sessionId: string, path: string, shellId?: string | null) {
     if (isTauriRuntime()) {
-      const payload = await invoke<number[]>('download_file', { sessionId, path });
+      const payload = await invoke<number[]>('download_file', { sessionId, path, shellId });
       return Uint8Array.from(payload);
     }
 

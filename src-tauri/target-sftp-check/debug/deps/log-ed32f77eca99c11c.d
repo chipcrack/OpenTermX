@@ -1,0 +1,10 @@
+D:\OpenTermX\src-tauri\target-sftp-check\debug\deps\log-ed32f77eca99c11c.d: C:\Users\Angelo\ Lopez\ Torrico\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\log-0.4.31\src\lib.rs C:\Users\Angelo\ Lopez\ Torrico\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\log-0.4.31\src\macros.rs C:\Users\Angelo\ Lopez\ Torrico\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\log-0.4.31\src\serde.rs C:\Users\Angelo\ Lopez\ Torrico\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\log-0.4.31\src\__private_api.rs
+
+D:\OpenTermX\src-tauri\target-sftp-check\debug\deps\liblog-ed32f77eca99c11c.rlib: C:\Users\Angelo\ Lopez\ Torrico\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\log-0.4.31\src\lib.rs C:\Users\Angelo\ Lopez\ Torrico\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\log-0.4.31\src\macros.rs C:\Users\Angelo\ Lopez\ Torrico\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\log-0.4.31\src\serde.rs C:\Users\Angelo\ Lopez\ Torrico\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\log-0.4.31\src\__private_api.rs
+
+D:\OpenTermX\src-tauri\target-sftp-check\debug\deps\liblog-ed32f77eca99c11c.rmeta: C:\Users\Angelo\ Lopez\ Torrico\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\log-0.4.31\src\lib.rs C:\Users\Angelo\ Lopez\ Torrico\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\log-0.4.31\src\macros.rs C:\Users\Angelo\ Lopez\ Torrico\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\log-0.4.31\src\serde.rs C:\Users\Angelo\ Lopez\ Torrico\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\log-0.4.31\src\__private_api.rs
+
+C:\Users\Angelo\ Lopez\ Torrico\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\log-0.4.31\src\lib.rs:
+C:\Users\Angelo\ Lopez\ Torrico\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\log-0.4.31\src\macros.rs:
+C:\Users\Angelo\ Lopez\ Torrico\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\log-0.4.31\src\serde.rs:
+C:\Users\Angelo\ Lopez\ Torrico\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\log-0.4.31\src\__private_api.rs:

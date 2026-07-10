@@ -1,0 +1,8 @@
+D:\OpenTermX\src-tauri\target-sftp-check\debug\deps\serde_with_macros-bd577e15b69f710b.d: C:\Users\Angelo\ Lopez\ Torrico\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde_with_macros-3.20.0\src\lib.rs C:\Users\Angelo\ Lopez\ Torrico\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde_with_macros-3.20.0\src\apply.rs C:\Users\Angelo\ Lopez\ Torrico\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde_with_macros-3.20.0\src\lazy_bool.rs C:\Users\Angelo\ Lopez\ Torrico\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde_with_macros-3.20.0\src\utils.rs
+
+D:\OpenTermX\src-tauri\target-sftp-check\debug\deps\serde_with_macros-bd577e15b69f710b.dll: C:\Users\Angelo\ Lopez\ Torrico\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde_with_macros-3.20.0\src\lib.rs C:\Users\Angelo\ Lopez\ Torrico\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde_with_macros-3.20.0\src\apply.rs C:\Users\Angelo\ Lopez\ Torrico\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde_with_macros-3.20.0\src\lazy_bool.rs C:\Users\Angelo\ Lopez\ Torrico\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde_with_macros-3.20.0\src\utils.rs
+
+C:\Users\Angelo\ Lopez\ Torrico\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde_with_macros-3.20.0\src\lib.rs:
+C:\Users\Angelo\ Lopez\ Torrico\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde_with_macros-3.20.0\src\apply.rs:
+C:\Users\Angelo\ Lopez\ Torrico\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde_with_macros-3.20.0\src\lazy_bool.rs:
+C:\Users\Angelo\ Lopez\ Torrico\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde_with_macros-3.20.0\src\utils.rs:
