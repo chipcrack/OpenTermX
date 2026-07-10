@@ -212,16 +212,12 @@ fn write_channel_all(channel: &mut Channel, payload: &[u8]) -> Result<(), std::i
   channel.flush()
 }
 
-fn append_input_batch(target: &mut Vec<u8>, chunk: Vec<u8>) {
-  target.extend_from_slice(&chunk);
-}
-
 fn spawn_terminal_reader(
   app_handle: AppHandle,
   shell_id: String,
   terminal: Arc<LiveTerminal>,
   ssh: SshSession,
-  mut channel: Channel,
+  channel: Channel,
   control_rx: mpsc::Receiver<TerminalControl>,
 ) {
   thread::spawn(move || {
@@ -229,62 +225,66 @@ fn spawn_terminal_reader(
     let output_event = format!("ssh-output-{shell_id}");
     let close_event = format!("ssh-closed-{shell_id}");
     let mut last_keepalive = Instant::now();
+    let writer_terminal = terminal.clone();
+    let writer_output_event = output_event.clone();
+    let writer_app_handle = app_handle.clone();
+    let mut writer_channel = channel.clone();
 
     ssh.set_blocking(false);
 
-    loop {
-      let mut pending_input = Vec::new();
-      let mut pending_resize: Option<(u32, u32)> = None;
-      let mut should_close = false;
-      let mut control_events = 0usize;
-
-      while control_events < 8 && pending_input.len() < 32 * 1024 {
-        match control_rx.try_recv() {
-          Ok(TerminalControl::Input(data)) => {
-            append_input_batch(&mut pending_input, data);
-            control_events += 1;
-          }
-          Ok(TerminalControl::Resize { cols, rows }) => {
-            pending_resize = Some((cols, rows));
-            control_events += 1;
-          }
-          Ok(TerminalControl::Close) | Err(mpsc::TryRecvError::Disconnected) => {
-            should_close = true;
-            break;
-          }
-          Err(mpsc::TryRecvError::Empty) => break,
-        }
-      }
-
-      if !pending_input.is_empty() {
-        if let Err(error) = write_channel_all(&mut channel, &pending_input) {
-          let message =
-            format!("\r\nOpenTermX detecto un error al escribir en SSH: {error}\r\n");
-          append_terminal_chunk(&app_handle, &output_event, &terminal, message.as_bytes());
-          terminal.closed.store(true, Ordering::SeqCst);
+    let writer_thread = thread::spawn(move || {
+      loop {
+        if writer_terminal.closed.load(Ordering::SeqCst) {
           break;
         }
-      }
 
-      if let Some((cols, rows)) = pending_resize {
-        if let Err(error) = channel.request_pty_size(cols.max(40), rows.max(10), None, None) {
-          let message =
-            format!("\r\nOpenTermX no pudo redimensionar el PTY remoto: {error}\r\n");
-          append_terminal_chunk(&app_handle, &output_event, &terminal, message.as_bytes());
+        match control_rx.recv_timeout(Duration::from_millis(25)) {
+          Ok(TerminalControl::Input(data)) => {
+            if let Err(error) = write_channel_all(&mut writer_channel, &data) {
+              let message =
+                format!("\r\nOpenTermX detecto un error al escribir en SSH: {error}\r\n");
+              append_terminal_chunk(
+                &writer_app_handle,
+                &writer_output_event,
+                &writer_terminal,
+                message.as_bytes(),
+              );
+              writer_terminal.closed.store(true, Ordering::SeqCst);
+              break;
+            }
+          }
+          Ok(TerminalControl::Resize { cols, rows }) => {
+            if let Err(error) =
+              writer_channel.request_pty_size(cols.max(40), rows.max(10), None, None)
+            {
+              let message =
+                format!("\r\nOpenTermX no pudo redimensionar el PTY remoto: {error}\r\n");
+              append_terminal_chunk(
+                &writer_app_handle,
+                &writer_output_event,
+                &writer_terminal,
+                message.as_bytes(),
+              );
+            }
+          }
+          Ok(TerminalControl::Close) | Err(mpsc::RecvTimeoutError::Disconnected) => {
+            writer_terminal.closed.store(true, Ordering::SeqCst);
+            break;
+          }
+          Err(mpsc::RecvTimeoutError::Timeout) => {}
         }
       }
+    });
 
-      if should_close {
-        terminal.closed.store(true, Ordering::SeqCst);
-      }
-
+    let mut reader_channel = channel;
+    loop {
       if terminal.closed.load(Ordering::SeqCst) {
         break;
       }
 
-      match channel.read(&mut buffer) {
+      match reader_channel.read(&mut buffer) {
         Ok(0) => {
-          if channel.eof() {
+          if reader_channel.eof() {
             terminal.closed.store(true, Ordering::SeqCst);
             break;
           }
@@ -310,13 +310,16 @@ fn spawn_terminal_reader(
         last_keepalive = Instant::now();
       }
 
-      thread::sleep(Duration::from_millis(10));
+      thread::sleep(Duration::from_millis(6));
     }
 
-    let _ = channel.close();
-    let _ = channel.wait_close();
-    let _ = ssh.disconnect(None, "OpenTermX", None);
     terminal.closed.store(true, Ordering::SeqCst);
+    let _ = writer_thread.join();
+
+    let mut close_channel = reader_channel;
+    let _ = close_channel.close();
+    let _ = close_channel.wait_close();
+    let _ = ssh.disconnect(None, "OpenTermX", None);
 
     if terminal.stream_enabled.load(Ordering::SeqCst) {
       let _ = app_handle.emit(&close_event, true);

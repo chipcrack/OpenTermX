@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import { useSessionStore } from '../../stores/sessionStore';
+import { useUiStore } from '../../stores/uiStore';
 import type { Session } from '../../types/entities';
 import { TerminalTabs } from './TerminalTabs';
 import { TunnelManager } from './TunnelManager';
@@ -13,6 +14,7 @@ export function TerminalWorkspace() {
   const activeSessionId = useSessionStore((state) => state.activeSessionId);
   const tunnelsVisible = useSessionStore((state) => state.tunnelsVisible);
   const openCreateTunnel = useSessionStore((state) => state.openCreateTunnel);
+  const sessionsSidebarVisible = useUiStore((state) => state.sessionsSidebarVisible);
 
   const activeSession = useMemo<Session | undefined>(
     () => sessions.find((session) => session.id === activeSessionId),
@@ -110,11 +112,13 @@ export function TerminalWorkspace() {
             })}
           </div>
         ) : (
-          <div className="grid flex-1 place-items-center px-6 py-10 text-center text-[var(--otx-muted)]">
+      <div className="grid flex-1 place-items-center px-6 py-10 text-center text-[var(--otx-muted)]">
             <div className="max-w-md">
               <h3 className="mb-2 text-lg font-semibold text-[var(--otx-text)]">No hay terminal abierta</h3>
               <p className="m-0 text-sm">
-                Selecciona una sesion del panel izquierdo para preparar una pestana.
+                {sessionsSidebarVisible
+                  ? 'Selecciona una sesion del panel izquierdo para preparar una pestana.'
+                  : 'Usa la pestana lateral izquierda para mostrar sesiones y abrir una conexion.'}
               </p>
             </div>
           </div>

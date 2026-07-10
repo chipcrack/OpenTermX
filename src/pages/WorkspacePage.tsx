@@ -8,6 +8,7 @@ import { SftpPanel } from '../components/sftp/SftpPanel';
 import { TunnelFormModal } from '../components/terminal/TunnelFormModal';
 import { TerminalWorkspace } from '../components/terminal/TerminalWorkspace';
 import { useSessionStore } from '../stores/sessionStore';
+import { useUiStore } from '../stores/uiStore';
 
 export function WorkspacePage() {
   const sftpVisible = useSessionStore((state) => state.sftpVisible);
@@ -16,6 +17,7 @@ export function WorkspacePage() {
   const loading = useSessionStore((state) => state.loading);
   const error = useSessionStore((state) => state.error);
   const clearError = useSessionStore((state) => state.clearError);
+  const sessionsSidebarVisible = useUiStore((state) => state.sessionsSidebarVisible);
 
   useEffect(() => {
     if (!initialized) {
@@ -43,6 +45,7 @@ export function WorkspacePage() {
       <AppShell
         header={<AppTopbar />}
         sidebar={<SessionsSidebar />}
+        sidebarVisible={sessionsSidebarVisible}
         main={<TerminalWorkspace />}
         aside={sftpVisible ? <SftpPanel /> : null}
       />

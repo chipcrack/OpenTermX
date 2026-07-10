@@ -3,8 +3,11 @@ import type { ThemeMode } from '../types/entities';
 
 interface UiStore {
   theme: ThemeMode;
+  sessionsSidebarVisible: boolean;
   setTheme: (theme: ThemeMode) => void;
   toggleTheme: () => void;
+  setSessionsSidebarVisible: (visible: boolean) => void;
+  toggleSessionsSidebar: () => void;
 }
 
 function readStoredTheme(): ThemeMode {
@@ -16,8 +19,17 @@ function readStoredTheme(): ThemeMode {
   return storedTheme === 'dark' ? 'dark' : 'light';
 }
 
+function readStoredSessionsSidebarVisibility() {
+  if (typeof window === 'undefined') {
+    return false;
+  }
+
+  return window.localStorage.getItem('opentermx-sessions-sidebar-visible') === 'true';
+}
+
 export const useUiStore = create<UiStore>((set, get) => ({
   theme: readStoredTheme(),
+  sessionsSidebarVisible: readStoredSessionsSidebarVisibility(),
   setTheme: (theme) => {
     if (typeof window !== 'undefined') {
       window.localStorage.setItem('opentermx-theme', theme);
@@ -30,5 +42,20 @@ export const useUiStore = create<UiStore>((set, get) => ({
       window.localStorage.setItem('opentermx-theme', nextTheme);
     }
     set({ theme: nextTheme });
+  },
+  setSessionsSidebarVisible: (visible) => {
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem('opentermx-sessions-sidebar-visible', String(visible));
+    }
+
+    set({ sessionsSidebarVisible: visible });
+  },
+  toggleSessionsSidebar: () => {
+    const nextVisible = !get().sessionsSidebarVisible;
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem('opentermx-sessions-sidebar-visible', String(nextVisible));
+    }
+
+    set({ sessionsSidebarVisible: nextVisible });
   }
 }));

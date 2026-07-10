@@ -16,10 +16,10 @@
         "label": "main",
         "create": false,
         "title": "OpenTermX",
-        "width": 1270,
-        "height": 760,
-        "minWidth": 1200,
-        "minHeight": 720,
+        "width": 1280,
+        "height": 720,
+        "minWidth": 852,
+        "minHeight": 480,
         "center": true,
         "resizable": true
       }
