@@ -106,6 +106,18 @@ export interface SftpEntry {
   modifiedAt: string;
 }
 
+export interface SftpDownloadResult {
+  cancelled: boolean;
+  filesDownloaded: number;
+  directoriesPrepared: number;
+  filesSkipped: number;
+}
+
+export interface SftpUploadResult {
+  cancelled: boolean;
+  filesUploaded: number;
+}
+
 export interface TerminalBootstrap {
   shellId: string;
   banner: string;

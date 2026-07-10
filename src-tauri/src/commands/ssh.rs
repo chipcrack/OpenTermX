@@ -665,7 +665,7 @@ pub fn open_terminal(
 
   Ok(TerminalBootstrap {
     shell_id,
-    banner: format!("SSH conectado con {}@{} via canal nativo", auth.username, auth.host),
+    banner: format!("{}@{}", auth.username, auth.host),
     connected: true,
     initial_output: Some(String::from_utf8_lossy(&initial_output).into_owned()),
   })

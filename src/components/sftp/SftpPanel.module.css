@@ -2,11 +2,11 @@
   position: relative;
   display: flex;
   flex-direction: column;
-  gap: 0.55rem;
+  gap: 0.4rem;
   height: 100%;
   min-height: 0;
   overflow: hidden;
-  padding: 0.7rem;
+  padding: 0.5rem;
 }
 
 .notice {
@@ -46,55 +46,44 @@
   color: var(--color-text);
 }
 
-.header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 0.75rem;
-}
-
-.kicker {
-  margin: 0 0 0.2rem;
-  color: var(--color-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  font-size: 0.64rem;
-}
-
-.title {
-  margin: 0;
-  font-size: 0.84rem;
-}
-
-.summary {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 0.15rem;
-  color: var(--color-muted);
-  font-size: 0.62rem;
-  text-align: right;
-}
-
 .toolbar {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.32rem;
-  padding: 0.38rem;
+  gap: 0.22rem;
+  padding: 0.28rem;
   border: 1px solid var(--color-border);
-  border-radius: 0.72rem;
-  background: var(--color-panel-elevated);
+  border-radius: 0.38rem;
+  background: color-mix(in srgb, var(--color-panel-elevated) 86%, #111);
 }
 
 .toolbar button {
   border: 1px solid var(--color-border);
-  border-radius: 0.48rem;
-  background: var(--color-input);
+  border-radius: 0.22rem;
+  background: color-mix(in srgb, var(--color-input) 85%, #111);
   color: var(--color-text);
-  padding: 0.34rem 0.5rem;
-  min-height: 1.72rem;
-  font-size: 0.7rem;
+  padding: 0.24rem 0.32rem;
+  min-height: 1.5rem;
+  font-size: 0.66rem;
   cursor: pointer;
+}
+
+.toolbarIconButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.55rem;
+  min-width: 1.55rem;
+  padding: 0;
+}
+
+.toolbarIcon {
+  width: 0.82rem;
+  height: 0.82rem;
+  flex: 0 0 auto;
+}
+
+.toolbarIconBusy {
+  animation: spin 1s linear infinite;
 }
 
 .toolbar button:disabled {
@@ -115,30 +104,14 @@
   accent-color: var(--color-primary);
 }
 
-.breadcrumbs {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.28rem;
-}
-
-.crumb {
-  border: 1px solid var(--color-border);
-  border-radius: 999px;
-  background: transparent;
-  color: var(--color-text-soft);
-  padding: 0.12rem 0.46rem;
-  font-size: 0.66rem;
-  cursor: pointer;
-}
-
 .pathBar {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 0.42rem;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 0.3rem;
   border: 1px solid var(--color-border);
-  border-radius: 0.68rem;
-  background: var(--color-input);
-  padding: 0.36rem;
+  border-radius: 0.28rem;
+  background: color-mix(in srgb, var(--color-input) 84%, #111);
+  padding: 0.24rem;
 }
 
 .pathBar input {
@@ -148,16 +121,24 @@
   background: transparent;
   color: var(--color-text-soft);
   font-family: var(--font-mono);
-  font-size: 0.7rem;
+  font-size: 0.72rem;
+}
+
+.pathMeta {
+  display: inline-flex;
+  align-items: center;
+  white-space: nowrap;
+  color: var(--color-muted);
+  font-size: 0.62rem;
 }
 
 .pathBar button {
   border: 1px solid var(--color-border);
-  border-radius: 0.48rem;
+  border-radius: 0.22rem;
   background: var(--color-panel);
   color: var(--color-text);
-  padding: 0.34rem 0.62rem;
-  font-size: 0.7rem;
+  padding: 0.24rem 0.44rem;
+  font-size: 0.66rem;
   cursor: pointer;
 }
 
@@ -167,7 +148,7 @@
   flex-direction: column;
   min-height: 0;
   border: 1px solid var(--color-border);
-  border-radius: 0.8rem;
+  border-radius: 0.28rem;
   overflow: auto;
   background: color-mix(in srgb, var(--color-panel) 92%, transparent);
 }
@@ -182,11 +163,11 @@
   display: grid;
   grid-template-columns: var(--sftp-columns, minmax(220px, 2.8fr) 58px 92px);
   gap: 0.5rem;
-  padding: 0.4rem 0.6rem;
+  padding: 0.24rem 0.44rem;
   background: color-mix(in srgb, var(--color-input) 88%, transparent);
   border-bottom: 1px solid var(--color-border);
   color: var(--color-muted);
-  font-size: 0.62rem;
+  font-size: 0.64rem;
   font-weight: 600;
   min-width: var(--sftp-table-min-width, 402px);
   position: sticky;
@@ -255,14 +236,14 @@
   grid-template-columns: var(--sftp-columns, minmax(220px, 2.8fr) 58px 92px);
   gap: 0.5rem;
   align-items: center;
-  padding: 0.38rem 0.6rem;
+  padding: 0.22rem 0.44rem;
   border: 0;
   border-bottom: 1px solid var(--color-border);
   background: transparent;
   color: var(--color-text);
   cursor: pointer;
   text-align: left;
-  font-size: 0.7rem;
+  font-size: 0.74rem;
   min-width: var(--sftp-table-min-width, 402px);
 }
 
@@ -299,6 +280,10 @@
 
 .directoryIcon {
   background: color-mix(in srgb, #fbbf24 18%, var(--color-panel));
+}
+
+.parentIcon {
+  background: color-mix(in srgb, var(--color-primary) 20%, var(--color-panel));
 }
 
 .fileIcon {
@@ -357,9 +342,79 @@
   color: #ef4444 !important;
 }
 
-@media (max-width: 980px) {
-  .summary {
-    display: none;
+.dialogForm {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.dialogBody {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.dialogField {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  color: var(--color-text);
+  font-size: 0.82rem;
+}
+
+.dialogField input {
+  border: 1px solid var(--color-border);
+  border-radius: 0.8rem;
+  background: var(--color-input);
+  color: var(--color-text);
+  padding: 0.72rem 0.88rem;
+  outline: none;
+}
+
+.dialogField input:focus {
+  border-color: color-mix(in srgb, var(--color-primary) 62%, var(--color-border));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-primary) 18%, transparent);
+}
+
+.dialogText {
+  margin: 0;
+  color: var(--color-text-soft);
+  line-height: 1.45;
+}
+
+.dialogActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.65rem;
+}
+
+.dialogButton {
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  background: var(--color-panel);
+  color: var(--color-text);
+  padding: 0.62rem 1rem;
+  cursor: pointer;
+}
+
+.dialogPrimaryButton {
+  border-color: var(--color-primary);
+  background: var(--color-accent-soft);
+}
+
+.dialogDangerButton {
+  border-color: color-mix(in srgb, var(--otx-danger) 52%, var(--color-border));
+  background: color-mix(in srgb, var(--otx-danger) 14%, var(--color-panel));
+  color: var(--otx-danger);
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
   }
 }
 
@@ -377,7 +432,11 @@
 
 @media (max-width: 560px) {
   .pathBar {
-    grid-template-columns: 1fr;
+    grid-template-columns: 1fr auto;
+  }
+
+  .pathMeta {
+    display: none;
   }
 
   .tableHeader,

@@ -8,7 +8,9 @@ import {
   useRef,
   useState
 } from 'react';
+import { Modal } from '../layout/Modal';
 import { desktopApi } from '../../services/desktopApi';
+import { isTauriRuntime } from '../../services/runtime';
 import { useSessionStore } from '../../stores/sessionStore';
 import type { SftpEntry } from '../../types/entities';
 import styles from './SftpPanel.module.css';
@@ -16,9 +18,57 @@ import styles from './SftpPanel.module.css';
 type SortKey = 'name' | 'size' | 'modifiedAt';
 type SortDirection = 'asc' | 'desc';
 type TransferNoticeKind = 'success' | 'error' | 'info';
+type SftpDialogState =
+  | {
+      kind: 'new-folder';
+      value: string;
+    }
+  | {
+      kind: 'rename';
+      entry: SftpEntry;
+      value: string;
+    }
+  | {
+      kind: 'delete';
+      entry: SftpEntry;
+    };
+
+interface LocalWritable {
+  write: (data: BlobPart) => Promise<void>;
+  close: () => Promise<void>;
+}
+
+interface LocalFileHandle {
+  createWritable: () => Promise<LocalWritable>;
+}
+
+interface LocalDirectoryHandle {
+  getDirectoryHandle: (
+    name: string,
+    options?: {
+      create?: boolean;
+    }
+  ) => Promise<LocalDirectoryHandle>;
+  getFileHandle: (
+    name: string,
+    options?: {
+      create?: boolean;
+    }
+  ) => Promise<LocalFileHandle>;
+}
+
+interface DownloadPlanStep {
+  kind: 'directory' | 'file';
+  relativePath: string;
+  remotePath?: string;
+}
 
 declare global {
   interface Window {
+    showDirectoryPicker?: (options?: {
+      id?: string;
+      mode?: 'read' | 'readwrite';
+    }) => Promise<LocalDirectoryHandle>;
     showSaveFilePicker?: (options?: {
       suggestedName?: string;
       excludeAcceptAllOption?: boolean;
@@ -36,12 +86,12 @@ declare global {
 }
 
 function normalizePath(path: string) {
-  const trimmed = path.trim();
-  if (!trimmed || trimmed === '/') {
+  const sanitized = path.trim().replace(/\\/g, '/');
+  if (!sanitized || sanitized === '/') {
     return '/';
   }
 
-  return `/${trimmed}`.replace(/\/+/g, '/').replace(/\/$/, '');
+  return `/${sanitized}`.replace(/\/+/g, '/').replace(/\/$/, '');
 }
 
 function getParentPath(path: string) {
@@ -50,13 +100,29 @@ function getParentPath(path: string) {
     return '/';
   }
 
-  const segments = normalized.split('/').filter(Boolean);
-  segments.pop();
-  return segments.length ? `/${segments.join('/')}` : '/';
+  const lastSlashIndex = normalized.lastIndexOf('/');
+  if (lastSlashIndex <= 0) {
+    return '/';
+  }
+
+  return normalized.slice(0, lastSlashIndex) || '/';
 }
 
 function joinPath(basePath: string, segment: string) {
   return normalizePath(`${normalizePath(basePath)}/${segment}`);
+}
+
+function resolveHomePath(username?: string | null) {
+  const normalizedUser = username?.trim();
+  if (!normalizedUser) {
+    return '/';
+  }
+
+  if (normalizedUser === 'root') {
+    return '/root';
+  }
+
+  return normalizePath(`/home/${normalizedUser}`);
 }
 
 function formatModified(value: string) {
@@ -174,14 +240,216 @@ async function saveBytesWithPicker(fileName: string, bytes: Uint8Array) {
   return 'custom';
 }
 
+async function pickDownloadDirectory() {
+  if (typeof window.showDirectoryPicker !== 'function') {
+    throw new Error('Este entorno no permite elegir carpetas locales para descargas estructuradas');
+  }
+
+  return window.showDirectoryPicker({
+    id: 'opentermx-sftp-download',
+    mode: 'readwrite'
+  });
+}
+
+async function ensureLocalDirectory(rootHandle: LocalDirectoryHandle, relativePath: string) {
+  const segments = relativePath.split('/').filter(Boolean);
+  let currentHandle = rootHandle;
+
+  for (const segment of segments) {
+    currentHandle = await currentHandle.getDirectoryHandle(segment, { create: true });
+  }
+
+  return currentHandle;
+}
+
+async function createLocalDirectory(rootHandle: LocalDirectoryHandle, relativePath: string) {
+  await ensureLocalDirectory(rootHandle, relativePath);
+}
+
+async function writeBytesToLocalPath(
+  rootHandle: LocalDirectoryHandle,
+  relativePath: string,
+  bytes: Uint8Array
+) {
+  const segments = relativePath.split('/').filter(Boolean);
+  const fileName = segments.pop();
+
+  if (!fileName) {
+    return false;
+  }
+
+  const directoryHandle = await ensureLocalDirectory(rootHandle, segments.join('/'));
+  let exists = false;
+
+  try {
+    await directoryHandle.getFileHandle(fileName);
+    exists = true;
+  } catch {
+    exists = false;
+  }
+
+  if (exists) {
+    const confirmed = window.confirm(
+      `El archivo local "${relativePath}" ya existe. Deseas sobrescribirlo?`
+    );
+
+    if (!confirmed) {
+      return false;
+    }
+  }
+
+  const fileHandle = await directoryHandle.getFileHandle(fileName, { create: true });
+  const safeBytes = new Uint8Array(bytes.byteLength);
+  safeBytes.set(bytes);
+  const writable = await fileHandle.createWritable();
+  await writable.write(safeBytes as unknown as BlobPart);
+  await writable.close();
+  return true;
+}
+
+async function collectDownloadPlan(
+  sessionId: string,
+  entry: SftpEntry,
+  relativePath = entry.name
+): Promise<DownloadPlanStep[]> {
+  if (entry.type === 'file') {
+    return [
+      {
+        kind: 'file',
+        relativePath,
+        remotePath: entry.path
+      }
+    ];
+  }
+
+  const children = await desktopApi.listDirectory(sessionId, entry.path);
+  const plan: DownloadPlanStep[] = [
+    {
+      kind: 'directory',
+      relativePath
+    }
+  ];
+
+  for (const child of children) {
+    plan.push(...(await collectDownloadPlan(sessionId, child, `${relativePath}/${child.name}`)));
+  }
+
+  return plan;
+}
+
+type ToolbarIconKind =
+  | 'root'
+  | 'home'
+  | 'up'
+  | 'refresh'
+  | 'upload'
+  | 'download'
+  | 'folder'
+  | 'rename'
+  | 'delete';
+
+function ToolbarIcon({
+  kind,
+  className
+}: {
+  kind: ToolbarIconKind;
+  className?: string;
+}) {
+  if (kind === 'root') {
+    return (
+      <svg viewBox="0 0 24 24" className={className} aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.8">
+        <path d="M12 4v6" strokeLinecap="round" />
+        <path d="M7 8h10l3 4v7H4v-7l3-4Z" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    );
+  }
+
+  if (kind === 'home') {
+    return (
+      <svg viewBox="0 0 24 24" className={className} aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.8">
+        <path d="m4 11 8-6 8 6" strokeLinecap="round" strokeLinejoin="round" />
+        <path d="M6.5 10.5V19h11v-8.5" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    );
+  }
+
+  if (kind === 'up') {
+    return (
+      <svg viewBox="0 0 24 24" className={className} aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.8">
+        <path d="M6 18h7a4 4 0 0 0 4-4V6" strokeLinecap="round" strokeLinejoin="round" />
+        <path d="m13 10 4-4 4 4" strokeLinecap="round" strokeLinejoin="round" transform="translate(-4 0)" />
+      </svg>
+    );
+  }
+
+  if (kind === 'refresh') {
+    return (
+      <svg viewBox="0 0 24 24" className={className} aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.8">
+        <path d="M20 6v5h-5" strokeLinecap="round" strokeLinejoin="round" />
+        <path d="M4 18v-5h5" strokeLinecap="round" strokeLinejoin="round" />
+        <path d="M7.5 8A7 7 0 0 1 19 11" strokeLinecap="round" />
+        <path d="M16.5 16A7 7 0 0 1 5 13" strokeLinecap="round" />
+      </svg>
+    );
+  }
+
+  if (kind === 'upload') {
+    return (
+      <svg viewBox="0 0 24 24" className={className} aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.8">
+        <path d="M12 17V5" strokeLinecap="round" />
+        <path d="m7 10 5-5 5 5" strokeLinecap="round" strokeLinejoin="round" />
+        <path d="M5 19h14" strokeLinecap="round" />
+      </svg>
+    );
+  }
+
+  if (kind === 'download') {
+    return (
+      <svg viewBox="0 0 24 24" className={className} aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.8">
+        <path d="M12 5v12" strokeLinecap="round" />
+        <path d="m7 12 5 5 5-5" strokeLinecap="round" strokeLinejoin="round" />
+        <path d="M5 19h14" strokeLinecap="round" />
+      </svg>
+    );
+  }
+
+  if (kind === 'folder') {
+    return (
+      <svg viewBox="0 0 24 24" className={className} aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.8">
+        <path d="M3.5 7.5h6l2 2H20v8.5a2 2 0 0 1-2 2H5.5a2 2 0 0 1-2-2Z" strokeLinecap="round" strokeLinejoin="round" />
+        <path d="M12 11.5v5" strokeLinecap="round" />
+        <path d="M9.5 14h5" strokeLinecap="round" />
+      </svg>
+    );
+  }
+
+  if (kind === 'rename') {
+    return (
+      <svg viewBox="0 0 24 24" className={className} aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.8">
+        <path d="m4 20 4.5-1 9-9a1.8 1.8 0 0 0 0-2.5l-1-1a1.8 1.8 0 0 0-2.5 0l-9 9L4 20Z" strokeLinecap="round" strokeLinejoin="round" />
+        <path d="m13 7 4 4" strokeLinecap="round" />
+      </svg>
+    );
+  }
+
+  return (
+    <svg viewBox="0 0 24 24" className={className} aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.8">
+      <path d="M7 8h10" strokeLinecap="round" />
+      <path d="M9 8V6.5A1.5 1.5 0 0 1 10.5 5h3A1.5 1.5 0 0 1 15 6.5V8" strokeLinecap="round" />
+      <path d="M6 8.5 7 19h10l1-10.5" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
 export function SftpPanel() {
   const sessions = useSessionStore((state) => state.sessions);
   const activeSessionId = useSessionStore((state) => state.activeSessionId);
   const [path, setPath] = useState('/');
   const [draftPath, setDraftPath] = useState('/');
+  const [pathHistory, setPathHistory] = useState<string[]>([]);
   const [reloadKey, setReloadKey] = useState(0);
   const [entries, setEntries] = useState<SftpEntry[]>([]);
-  const [selectedPath, setSelectedPath] = useState<string | null>(null);
+  const [selectedPaths, setSelectedPaths] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showHidden, setShowHidden] = useState(false);
@@ -208,7 +476,13 @@ export function SftpPanel() {
     kind: TransferNoticeKind;
     message: string;
   } | null>(null);
+  const [dialogState, setDialogState] = useState<SftpDialogState | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const pathRef = useRef(path);
+
+  useEffect(() => {
+    pathRef.current = path;
+  }, [path]);
 
   const activeSession = useMemo(
     () => sessions.find((session) => session.id === activeSessionId),
@@ -216,16 +490,13 @@ export function SftpPanel() {
   );
 
   const homePath = useMemo(() => {
-    if (!activeSession?.username) {
-      return '/';
-    }
-
-    return normalizePath(`/home/${activeSession.username}`);
+    return resolveHomePath(activeSession?.username);
   }, [activeSession?.username]);
 
   useEffect(() => {
-    setSelectedPath(null);
+    setSelectedPaths([]);
     setContextMenu(null);
+    setPathHistory([]);
     if (!activeSession) {
       setPath('/');
       setDraftPath('/');
@@ -239,7 +510,7 @@ export function SftpPanel() {
   useEffect(() => {
     if (!activeSessionId) {
       setEntries([]);
-      setSelectedPath(null);
+      setSelectedPaths([]);
       setError(null);
       return;
     }
@@ -251,7 +522,9 @@ export function SftpPanel() {
       .listDirectory(activeSessionId, path)
       .then((result) => {
         setEntries(result);
-        setSelectedPath((current) => (current && result.some((entry) => entry.path === current) ? current : null));
+        setSelectedPaths((current) =>
+          current.filter((selectedPath) => result.some((entry) => entry.path === selectedPath))
+        );
         setContextMenu(null);
       })
       .catch((nextError) => setError(nextError instanceof Error ? nextError.message : 'No se pudo cargar la ruta remota'))
@@ -344,32 +617,58 @@ export function SftpPanel() {
     [entries, showHidden, sortDirection, sortKey]
   );
 
-  const selectedEntry = useMemo(
-    () => visibleEntries.find((entry) => entry.path === selectedPath) ?? null,
-    [selectedPath, visibleEntries]
-  );
+  const parentPath = useMemo(() => getParentPath(path), [path]);
+  const hasParent = path !== '/' && parentPath !== path;
 
-  const breadcrumbs = useMemo(() => {
-    const normalized = normalizePath(path);
-    const segments = normalized.split('/').filter(Boolean);
-    const items = [{ label: '/', value: '/' }];
+  const displayEntries = useMemo(() => {
+    if (!hasParent) {
+      return visibleEntries;
+    }
 
-    let currentPath = '';
-    segments.forEach((segment) => {
-      currentPath = `${currentPath}/${segment}`;
-      items.push({ label: segment, value: currentPath });
-    });
+    const parentEntry: SftpEntry = {
+      id: `__parent__:${path}`,
+      name: '..',
+      path: parentPath,
+      type: 'directory',
+      size: '--',
+      modifiedAt: ''
+    };
 
-    return items;
-  }, [path]);
+    return [parentEntry, ...visibleEntries];
+  }, [hasParent, parentPath, path, visibleEntries]);
 
   const refresh = () => setReloadKey((value) => value + 1);
 
-  const navigate = (nextPath: string) => {
+  const navigate = (nextPath: string, options?: { rememberCurrent?: boolean }) => {
     const normalized = normalizePath(nextPath);
+    const currentPath = pathRef.current;
+
+    if ((options?.rememberCurrent ?? true) && currentPath && currentPath !== normalized) {
+      setPathHistory((currentHistory) => {
+        if (currentHistory[currentHistory.length - 1] === currentPath) {
+          return currentHistory;
+        }
+
+        return [...currentHistory, currentPath];
+      });
+    }
+
     setPath(normalized);
     setDraftPath(normalized);
-    setSelectedPath(null);
+    setSelectedPaths([]);
+  };
+
+  const navigateUp = () => {
+    if (hasParent) {
+      navigate(parentPath, { rememberCurrent: false });
+      return;
+    }
+
+    const currentPath = pathRef.current;
+    const previousPath = [...pathHistory].reverse().find((entry) => entry !== currentPath) ?? null;
+    if (previousPath) {
+      navigate(previousPath, { rememberCurrent: false });
+    }
   };
 
   const handlePathSubmit = (event: FormEvent<HTMLFormElement>) => {
@@ -377,78 +676,57 @@ export function SftpPanel() {
     navigate(draftPath);
   };
 
-  const handleNewFolder = async () => {
+  const handleNewFolder = () => {
     if (!activeSessionId) {
       return;
     }
 
-    try {
-      const folderName = window.prompt('Nombre de la nueva carpeta');
-      if (!folderName) {
-        return;
-      }
-
-      await desktopApi.createDirectory(activeSessionId, joinPath(path, folderName));
-      setError(null);
-      refresh();
-    } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : 'No se pudo crear la carpeta');
-    }
+    setContextMenu(null);
+    setDialogState({
+      kind: 'new-folder',
+      value: ''
+    });
   };
 
-  const handleRenameEntry = async (entry: SftpEntry) => {
+  const handleRenameEntry = (entry: SftpEntry) => {
     if (!activeSessionId) {
       return;
     }
 
-    try {
-      const nextName = window.prompt('Nuevo nombre', entry.name);
-      if (!nextName || nextName === entry.name) {
-        return;
-      }
-
-      await desktopApi.renameEntry(activeSessionId, entry.path, joinPath(path, nextName));
-      setError(null);
-      refresh();
-    } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : 'No se pudo renombrar el elemento');
-    }
+    setContextMenu(null);
+    setDialogState({
+      kind: 'rename',
+      entry,
+      value: entry.name
+    });
   };
 
-  const handleRename = async () => {
+  const handleRename = () => {
     if (!selectedEntry) {
       return;
     }
 
-    await handleRenameEntry(selectedEntry);
+    handleRenameEntry(selectedEntry);
   };
 
-  const handleDeleteEntry = async (entry: SftpEntry) => {
+  const handleDeleteEntry = (entry: SftpEntry) => {
     if (!activeSessionId) {
       return;
     }
 
-    try {
-      const confirmed = window.confirm(`Eliminar "${entry.name}"?`);
-      if (!confirmed) {
-        return;
-      }
-
-      await desktopApi.deleteEntry(activeSessionId, entry.path, entry.type);
-      setSelectedPath((current) => (current === entry.path ? null : current));
-      setError(null);
-      refresh();
-    } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : 'No se pudo eliminar el elemento');
-    }
+    setContextMenu(null);
+    setDialogState({
+      kind: 'delete',
+      entry
+    });
   };
 
-  const handleDelete = async () => {
+  const handleDelete = () => {
     if (!selectedEntry) {
       return;
     }
 
-    await handleDeleteEntry(selectedEntry);
+    handleDeleteEntry(selectedEntry);
   };
 
   const handleOpenEntry = (entry: SftpEntry) => {
@@ -458,7 +736,7 @@ export function SftpPanel() {
       return;
     }
 
-    setSelectedPath(entry.path);
+    setSelectedPaths([entry.path]);
   };
 
   const handleSort = (nextSortKey: SortKey) => {
@@ -483,11 +761,28 @@ export function SftpPanel() {
 
   const handleContextMenu = (event: ReactMouseEvent<HTMLButtonElement>, entry: SftpEntry) => {
     event.preventDefault();
-    setSelectedPath(entry.path);
+    setSelectedPaths([entry.path]);
     setContextMenu({
       x: event.clientX,
       y: event.clientY,
       entry
+    });
+  };
+
+  const handleRowSelection = (event: ReactMouseEvent<HTMLButtonElement>, entry: SftpEntry) => {
+    setContextMenu(null);
+    const appendSelection = event.ctrlKey || event.metaKey;
+
+    setSelectedPaths((current) => {
+      if (!appendSelection) {
+        return [entry.path];
+      }
+
+      if (current.includes(entry.path)) {
+        return current.filter((selectedPath) => selectedPath !== entry.path);
+      }
+
+      return [...current, entry.path];
     });
   };
 
@@ -502,7 +797,110 @@ export function SftpPanel() {
     });
   };
 
-  const handleSelectUpload = () => {
+  const closeDialog = () => setDialogState(null);
+
+  const handleDialogSubmit = async (event?: FormEvent<HTMLFormElement>) => {
+    event?.preventDefault();
+
+    if (!activeSessionId || !dialogState) {
+      return;
+    }
+
+    try {
+      if (dialogState.kind === 'new-folder') {
+        const folderName = dialogState.value.trim();
+        if (!folderName) {
+          return;
+        }
+
+        await desktopApi.createDirectory(activeSessionId, joinPath(path, folderName));
+        setError(null);
+        setDialogState(null);
+        refresh();
+        return;
+      }
+
+      if (dialogState.kind === 'rename') {
+        const nextName = dialogState.value.trim();
+        if (!nextName) {
+          return;
+        }
+
+        if (nextName === dialogState.entry.name) {
+          setDialogState(null);
+          return;
+        }
+
+        await desktopApi.renameEntry(activeSessionId, dialogState.entry.path, joinPath(path, nextName));
+        setError(null);
+        setDialogState(null);
+        refresh();
+        return;
+      }
+
+      await desktopApi.deleteEntry(activeSessionId, dialogState.entry.path, dialogState.entry.type);
+      setSelectedPaths((current) =>
+        current.filter((selectedPath) => {
+          if (selectedPath === dialogState.entry.path) {
+            return false;
+          }
+
+          return !(
+            dialogState.entry.type === 'directory' &&
+            selectedPath.startsWith(`${dialogState.entry.path}/`)
+          );
+        })
+      );
+      setError(null);
+      setDialogState(null);
+      refresh();
+    } catch (nextError) {
+      setError(
+        nextError instanceof Error
+          ? nextError.message
+          : dialogState.kind === 'new-folder'
+            ? 'No se pudo crear la carpeta'
+            : dialogState.kind === 'rename'
+              ? 'No se pudo renombrar el elemento'
+              : 'No se pudo eliminar el elemento'
+      );
+    }
+  };
+
+  const handleSelectUpload = async () => {
+    if (!activeSessionId) {
+      return;
+    }
+
+    if (isTauriRuntime()) {
+      try {
+        setUploading(true);
+        const result = await desktopApi.uploadEntries(activeSessionId, path);
+
+        if (result.cancelled) {
+          return;
+        }
+
+        setError(null);
+        setNotice({
+          kind: result.filesUploaded > 0 ? 'success' : 'info',
+          message: `Subida completada: ${result.filesUploaded} archivo(s)`
+        });
+        refresh();
+      } catch (nextError) {
+        const message = nextError instanceof Error ? nextError.message : 'No se pudo subir el archivo';
+        setError(message);
+        setNotice({
+          kind: 'error',
+          message
+        });
+      } finally {
+        setUploading(false);
+      }
+
+      return;
+    }
+
     fileInputRef.current?.click();
   };
 
@@ -536,8 +934,38 @@ export function SftpPanel() {
     }
   };
 
-  const handleDownload = async (entry = selectedEntry) => {
-    if (!activeSessionId || !entry || entry.type !== 'file') {
+  const handleSingleFileDownload = async (entry: SftpEntry) => {
+    if (!activeSessionId || entry.type !== 'file') {
+      return;
+    }
+
+    if (isTauriRuntime()) {
+      try {
+        setDownloading(true);
+        const result = await desktopApi.downloadEntries(activeSessionId, [entry.path]);
+
+        if (result.cancelled) {
+          return;
+        }
+
+        setError(null);
+        setNotice({
+          kind: result.filesDownloaded > 0 ? 'success' : 'info',
+          message: `Descarga completada: ${result.filesDownloaded} archivo(s)${
+            result.filesSkipped > 0 ? `, ${result.filesSkipped} omitido(s)` : ''
+          }`
+        });
+      } catch (nextError) {
+        const message = nextError instanceof Error ? nextError.message : 'No se pudo descargar el archivo';
+        setError(message);
+        setNotice({
+          kind: 'error',
+          message
+        });
+      } finally {
+        setDownloading(false);
+      }
+
       return;
     }
 
@@ -567,6 +995,131 @@ export function SftpPanel() {
     }
   };
 
+  const handleStructuredDownload = async (targets: SftpEntry[]) => {
+    if (!activeSessionId || !targets.length) {
+      return;
+    }
+
+    if (isTauriRuntime()) {
+      try {
+        setDownloading(true);
+        const result = await desktopApi.downloadEntries(
+          activeSessionId,
+          targets.map((entry) => entry.path)
+        );
+
+        if (result.cancelled) {
+          return;
+        }
+
+        setError(null);
+        setNotice({
+          kind: result.filesDownloaded > 0 ? 'success' : 'info',
+          message: `Descarga completada: ${result.filesDownloaded} archivo(s), ${result.directoriesPrepared} carpeta(s)${
+            result.filesSkipped > 0 ? `, ${result.filesSkipped} omitido(s)` : ''
+          }`
+        });
+      } catch (nextError) {
+        const message =
+          nextError instanceof Error ? nextError.message : 'No se pudo completar la descarga';
+        setError(message);
+        setNotice({
+          kind: 'error',
+          message
+        });
+      } finally {
+        setDownloading(false);
+      }
+
+      return;
+    }
+
+    try {
+      setDownloading(true);
+
+      if (typeof window.showDirectoryPicker !== 'function') {
+        if (targets.some((entry) => entry.type === 'directory')) {
+          throw new Error(
+            'Esta plataforma no permite elegir una carpeta local para descargar directorios sin comprimir'
+          );
+        }
+
+        for (const entry of targets) {
+          const bytes = await desktopApi.downloadFile(activeSessionId, entry.path);
+          triggerBrowserDownload(entry.name, bytes);
+        }
+
+        setError(null);
+        setNotice({
+          kind: 'info',
+          message: `Descarga iniciada para ${targets.length} archivo(s)`
+        });
+        return;
+      }
+
+      const rootHandle = await pickDownloadDirectory();
+      let filesDownloaded = 0;
+      let filesSkipped = 0;
+      let directoriesPrepared = 0;
+
+      for (const target of targets) {
+        const plan = await collectDownloadPlan(activeSessionId, target);
+
+        for (const step of plan) {
+          if (step.kind === 'directory') {
+            await createLocalDirectory(rootHandle, step.relativePath);
+            directoriesPrepared += 1;
+            continue;
+          }
+
+          const bytes = await desktopApi.downloadFile(activeSessionId, step.remotePath!);
+          const saved = await writeBytesToLocalPath(rootHandle, step.relativePath, bytes);
+
+          if (saved) {
+            filesDownloaded += 1;
+          } else {
+            filesSkipped += 1;
+          }
+        }
+      }
+
+      setError(null);
+      setNotice({
+        kind: filesDownloaded > 0 ? 'success' : 'info',
+        message: `Descarga completada: ${filesDownloaded} archivo(s), ${directoriesPrepared} carpeta(s)${
+          filesSkipped > 0 ? `, ${filesSkipped} omitido(s)` : ''
+        }`
+      });
+    } catch (nextError) {
+      const message =
+        nextError instanceof Error ? nextError.message : 'No se pudo completar la descarga estructurada';
+      setError(message);
+      if (!(nextError instanceof DOMException && nextError.name === 'AbortError')) {
+        setNotice({
+          kind: 'error',
+          message
+        });
+      }
+    } finally {
+      setDownloading(false);
+    }
+  };
+
+  const handleDownload = async (target: SftpEntry | SftpEntry[] = selectedEntries) => {
+    const targets = Array.isArray(target) ? target : target ? [target] : [];
+
+    if (!targets.length) {
+      return;
+    }
+
+    if (targets.length === 1 && targets[0].type === 'file') {
+      await handleSingleFileDownload(targets[0]);
+      return;
+    }
+
+    await handleStructuredDownload(targets);
+  };
+
   const runContextAction = async (action: 'open' | 'rename' | 'delete' | 'new-folder' | 'download' | 'upload') => {
     const currentEntry = contextMenu?.entry ?? null;
     setContextMenu(null);
@@ -576,18 +1129,18 @@ export function SftpPanel() {
       return;
     }
 
-    if (action === 'new-folder') {
-      await handleNewFolder();
-      return;
-    }
+      if (action === 'new-folder') {
+        handleNewFolder();
+        return;
+      }
 
-    if (action === 'upload') {
-      handleSelectUpload();
-      return;
-    }
+      if (action === 'upload') {
+        await handleSelectUpload();
+        return;
+      }
 
     if (action === 'download' && currentEntry) {
-      setSelectedPath(currentEntry.path);
+      setSelectedPaths([currentEntry.path]);
       await handleDownload(currentEntry);
       return;
     }
@@ -596,7 +1149,7 @@ export function SftpPanel() {
       return;
     }
 
-    setSelectedPath(currentEntry.path);
+    setSelectedPaths([currentEntry.path]);
 
     if (action === 'rename') {
       await handleRenameEntry(currentEntry);
@@ -612,6 +1165,15 @@ export function SftpPanel() {
     '--sftp-columns': `${columnWidths.name}px ${columnWidths.size}px ${columnWidths.modifiedAt}px`,
     '--sftp-table-min-width': `${columnWidths.name + columnWidths.size + columnWidths.modifiedAt + 32}px`
   } as CSSProperties;
+
+  const selectedEntries = useMemo(() => {
+    const entryMap = new Map(visibleEntries.map((entry) => [entry.path, entry]));
+    return selectedPaths
+      .map((selectedPath) => entryMap.get(selectedPath))
+      .filter((entry): entry is SftpEntry => Boolean(entry));
+  }, [selectedPaths, visibleEntries]);
+
+  const selectedEntry = selectedEntries[selectedEntries.length - 1] ?? null;
 
   return (
     <section className={styles.panel}>
@@ -632,67 +1194,107 @@ export function SftpPanel() {
         </div>
       ) : null}
 
-      <div className={styles.header}>
-        <div>
-          <p className={styles.kicker}>SFTP Explorer</p>
-          <h2 className={styles.title}>{activeSession?.name ?? 'Sin sesion activa'}</h2>
-        </div>
-        <div className={styles.summary}>
-          <span>{visibleEntries.length} elementos</span>
-          <span>{selectedEntry ? `Seleccionado: ${selectedEntry.name}` : 'Sin seleccion'}</span>
-        </div>
-      </div>
-
       <div className={styles.toolbar}>
-        <button type="button" onClick={() => navigate('/')} disabled={!activeSession || loading} title="Ir a raiz">
-          Root
-        </button>
-        <button type="button" onClick={() => navigate(homePath)} disabled={!activeSession || loading} title="Ir al home">
-          Home
+        <button
+          type="button"
+          className={styles.toolbarIconButton}
+          onClick={() => navigate('/')}
+          disabled={!activeSession || loading}
+          title="Ir a raiz"
+          aria-label="Ir a raiz"
+        >
+          <ToolbarIcon kind="root" className={styles.toolbarIcon} />
         </button>
         <button
           type="button"
-          onClick={() => navigate(getParentPath(path))}
+          className={styles.toolbarIconButton}
+          onClick={() => navigate(homePath)}
+          disabled={!activeSession || loading}
+          title="Ir al home"
+          aria-label="Ir al home"
+        >
+          <ToolbarIcon kind="home" className={styles.toolbarIcon} />
+        </button>
+        <button
+          type="button"
+          className={styles.toolbarIconButton}
+          onClick={navigateUp}
           disabled={!activeSession || loading || path === '/'}
           title="Subir un nivel"
+          aria-label="Subir un nivel"
         >
-          Up
-        </button>
-        <button type="button" onClick={refresh} disabled={!activeSession || loading} title="Refrescar">
-          Refresh
-        </button>
-        <button type="button" onClick={handleSelectUpload} disabled={!activeSession || loading || uploading} title="Subir archivo">
-          {uploading ? 'Subiendo...' : 'Subir'}
+          <ToolbarIcon kind="up" className={styles.toolbarIcon} />
         </button>
         <button
           type="button"
-          onClick={() => void handleDownload()}
-          disabled={!activeSession || !selectedEntry || selectedEntry.type !== 'file' || loading || downloading}
-          title="Descargar seleccionado"
+          className={styles.toolbarIconButton}
+          onClick={refresh}
+          disabled={!activeSession || loading}
+          title="Refrescar"
+          aria-label="Refrescar"
         >
-          {downloading ? 'Descargando...' : 'Descargar'}
+          <ToolbarIcon kind="refresh" className={styles.toolbarIcon} />
         </button>
-        <button type="button" onClick={handleNewFolder} disabled={!activeSession || loading} title="Nueva carpeta">
-          Carpeta
+        <button
+          type="button"
+          className={styles.toolbarIconButton}
+          onClick={handleSelectUpload}
+          disabled={!activeSession || loading || uploading}
+          title={uploading ? 'Subiendo archivo...' : 'Subir archivo'}
+          aria-label={uploading ? 'Subiendo archivo' : 'Subir archivo'}
+        >
+          <ToolbarIcon
+            kind="upload"
+            className={`${styles.toolbarIcon} ${uploading ? styles.toolbarIconBusy : ''}`}
+          />
         </button>
-        <button type="button" onClick={handleRename} disabled={!activeSession || !selectedEntry || loading} title="Renombrar seleccionado">
-          Renombrar
+        <button
+          type="button"
+          className={styles.toolbarIconButton}
+          onClick={() => void handleDownload()}
+          disabled={!activeSession || !selectedEntries.length || loading || downloading}
+          title="Descargar seleccion"
+          aria-label="Descargar seleccion"
+        >
+          <ToolbarIcon
+            kind="download"
+            className={`${styles.toolbarIcon} ${downloading ? styles.toolbarIconBusy : ''}`}
+          />
         </button>
-        <button type="button" onClick={handleDelete} disabled={!activeSession || !selectedEntry || loading} title="Eliminar seleccionado">
-          Eliminar
+        <button
+          type="button"
+          className={styles.toolbarIconButton}
+          onClick={handleNewFolder}
+          disabled={!activeSession || loading}
+          title="Nueva carpeta"
+          aria-label="Nueva carpeta"
+        >
+          <ToolbarIcon kind="folder" className={styles.toolbarIcon} />
+        </button>
+        <button
+          type="button"
+          className={styles.toolbarIconButton}
+          onClick={handleRename}
+          disabled={!activeSession || selectedEntries.length !== 1 || loading}
+          title="Renombrar seleccionado"
+          aria-label="Renombrar seleccionado"
+        >
+          <ToolbarIcon kind="rename" className={styles.toolbarIcon} />
+        </button>
+        <button
+          type="button"
+          className={styles.toolbarIconButton}
+          onClick={handleDelete}
+          disabled={!activeSession || selectedEntries.length !== 1 || loading}
+          title="Eliminar seleccionado"
+          aria-label="Eliminar seleccionado"
+        >
+          <ToolbarIcon kind="delete" className={styles.toolbarIcon} />
         </button>
         <label className={styles.hiddenToggle}>
           <input type="checkbox" checked={showHidden} onChange={(event) => setShowHidden(event.target.checked)} />
           <span>Ocultos</span>
         </label>
-      </div>
-
-      <div className={styles.breadcrumbs}>
-        {breadcrumbs.map((crumb) => (
-          <button key={crumb.value} type="button" onClick={() => navigate(crumb.value)} className={styles.crumb}>
-            {crumb.label}
-          </button>
-        ))}
       </div>
 
       <form className={styles.pathBar} onSubmit={handlePathSubmit}>
@@ -702,6 +1304,9 @@ export function SftpPanel() {
           onChange={(event) => setDraftPath(event.target.value)}
           placeholder="Ruta remota"
         />
+        <span className={styles.pathMeta}>
+          {selectedEntries.length > 0 ? `${selectedEntries.length} sel` : `${visibleEntries.length} items`}
+        </span>
         <button type="submit" disabled={!activeSession || loading}>
           Ir
         </button>
@@ -759,22 +1364,42 @@ export function SftpPanel() {
             ) : null}
 
             {!error &&
-              visibleEntries.map((entry) => (
+              displayEntries.map((entry) => (
                 <button
                   key={entry.id}
                   type="button"
-                  className={`${styles.row} ${selectedPath === entry.path ? styles.rowSelected : ''}`}
-                  onClick={() => setSelectedPath(entry.path)}
-                  onDoubleClick={() => handleOpenEntry(entry)}
+                  className={`${styles.row} ${selectedPaths.includes(entry.path) ? styles.rowSelected : ''}`}
+                  onClick={(event) => {
+                    if (entry.id.startsWith('__parent__:')) {
+                      navigateUp();
+                      return;
+                    }
+
+                    handleRowSelection(event, entry);
+                  }}
+                  onDoubleClick={() => {
+                    if (entry.id.startsWith('__parent__:')) {
+                      navigateUp();
+                      return;
+                    }
+
+                    handleOpenEntry(entry);
+                  }}
                   onContextMenu={(event) => handleContextMenu(event, entry)}
                   title={entry.path}
                 >
                   <span className={styles.nameCell}>
                     <span
-                      className={`${styles.icon} ${entry.type === 'directory' ? styles.directoryIcon : styles.fileIcon}`}
+                      className={`${styles.icon} ${
+                        entry.id.startsWith('__parent__:')
+                          ? styles.parentIcon
+                          : entry.type === 'directory'
+                            ? styles.directoryIcon
+                            : styles.fileIcon
+                      }`}
                       aria-hidden="true"
                     >
-                      {resolveEntryIcon(entry)}
+                      {entry.id.startsWith('__parent__:') ? '..' : resolveEntryIcon(entry)}
                     </span>
                     <span className={styles.nameText}>{entry.name}</span>
                   </span>
@@ -803,11 +1428,9 @@ export function SftpPanel() {
           <button type="button" onClick={() => void runContextAction('open')}>
             Abrir
           </button>
-          {contextMenu.entry.type === 'file' ? (
-            <button type="button" onClick={() => void runContextAction('download')}>
-              Descargar
-            </button>
-          ) : null}
+          <button type="button" onClick={() => void runContextAction('download')}>
+            Descargar
+          </button>
           <button type="button" onClick={() => void runContextAction('upload')}>
             Subir aqui
           </button>
@@ -823,7 +1446,73 @@ export function SftpPanel() {
         </div>
       ) : null}
 
-      <input ref={fileInputRef} type="file" hidden onChange={handleUploadFile} />
+      {dialogState ? (
+        <Modal
+          title={
+            dialogState.kind === 'new-folder'
+              ? 'Nueva carpeta'
+              : dialogState.kind === 'rename'
+                ? 'Renombrar elemento'
+                : 'Confirmar eliminacion'
+          }
+          subtitle={
+            dialogState.kind === 'delete'
+              ? `Se eliminara "${dialogState.entry.name}" de la ruta remota actual.`
+              : 'Accion gestionada dentro de la app de escritorio.'
+          }
+          onClose={closeDialog}
+        >
+          {dialogState.kind === 'delete' ? (
+            <div className={styles.dialogBody}>
+              <p className={styles.dialogText}>
+                Vas a eliminar <strong>{dialogState.entry.name}</strong>. Esta accion no se puede deshacer.
+              </p>
+              <div className={styles.dialogActions}>
+                <button type="button" className={styles.dialogButton} onClick={closeDialog}>
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  className={`${styles.dialogButton} ${styles.dialogDangerButton}`}
+                  onClick={() => void handleDialogSubmit()}
+                >
+                  Eliminar
+                </button>
+              </div>
+            </div>
+          ) : (
+            <form className={styles.dialogForm} onSubmit={(event) => void handleDialogSubmit(event)}>
+              <label className={styles.dialogField}>
+                <span>{dialogState.kind === 'new-folder' ? 'Nombre de carpeta' : 'Nuevo nombre'}</span>
+                <input
+                  autoFocus
+                  value={dialogState.value}
+                  onChange={(event) =>
+                    setDialogState((current) =>
+                      current && current.kind !== 'delete'
+                        ? {
+                            ...current,
+                            value: event.target.value
+                          }
+                        : current
+                    )
+                  }
+                />
+              </label>
+              <div className={styles.dialogActions}>
+                <button type="button" className={styles.dialogButton} onClick={closeDialog}>
+                  Cancelar
+                </button>
+                <button type="submit" className={`${styles.dialogButton} ${styles.dialogPrimaryButton}`}>
+                  Guardar
+                </button>
+              </div>
+            </form>
+          )}
+        </Modal>
+      ) : null}
+
+      {!isTauriRuntime() ? <input ref={fileInputRef} type="file" hidden onChange={handleUploadFile} /> : null}
     </section>
   );
 }

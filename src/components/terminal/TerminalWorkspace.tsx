@@ -37,8 +37,8 @@ export function TerminalWorkspace() {
   const extendedStatus = activeTab?.statusText ?? statusLabel;
 
   return (
-    <section className="flex h-full min-h-0 flex-col gap-3 overflow-hidden p-3 max-lg:overflow-y-auto">
-      <header className="shrink-0 flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+    <section className="flex h-full min-h-0 flex-col gap-3 overflow-hidden p-3 max-[851px]:overflow-y-auto">
+      <header className="shrink-0 flex flex-col gap-3 min-[852px]:flex-row min-[852px]:items-start min-[852px]:justify-between">
         <div>
           <p className="otx-kicker m-0">Workspace</p>
           <h2 className="mt-1.5 text-lg font-semibold">{activeSession?.name ?? 'Sin sesion activa'}</h2>
@@ -91,7 +91,7 @@ export function TerminalWorkspace() {
         {extendedStatus}
       </div>
 
-      <div className="flex min-h-[21rem] flex-1 flex-col overflow-hidden rounded-[22px] border border-[var(--otx-border)] bg-[var(--otx-terminal)] shadow-shell max-lg:min-h-[24rem]">
+      <div className="flex min-h-[21rem] flex-1 flex-col overflow-hidden rounded-[22px] border border-[var(--otx-border)] bg-[var(--otx-terminal)] shadow-shell max-[851px]:min-h-[24rem]">
         <TerminalTabs />
         {terminalTabs.length > 0 ? (
           <div className="relative min-h-0 flex-1 overflow-hidden">

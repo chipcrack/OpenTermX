@@ -414,7 +414,7 @@ export function TerminalViewport({ session, tabId, isActive }: TerminalViewportP
           `${colors.info}${session.username}@${session.host}:${session.port}${colors.reset} ${colors.muted}- ${session.name}${colors.reset}`
         );
         terminal.writeln(`${colors.muted}Preparando terminal interactiva...${colors.reset}`);
-        terminal.writeln('');
+        {/*terminal.writeln('');*/}
         setTabStatus(tabId, 'Preparando terminal...', null);
 
         const writeStatusLine = (message: string) => {
@@ -771,9 +771,9 @@ export function TerminalViewport({ session, tabId, isActive }: TerminalViewportP
             setTabReconnecting(tabId, false);
             updateStatus(result.connected ? 'SSH activo' : 'Pendiente', null);
 
-            terminal.writeln('');
+            {/*terminal.writeln('');
             terminal.writeln(`${colors.success}${result.banner}${colors.reset}`);
-            terminal.writeln(`${colors.success}Estado de conexion: en linea${colors.reset}`);
+            terminal.writeln(`${colors.success}En linea${colors.reset}`);*/}
             if (isReconnect) {
               terminal.writeln(
                 `${colors.success}SSH reconectado${colors.reset} ${colors.muted}- se conservo el historial visible, verifica el contexto remoto${colors.reset}`

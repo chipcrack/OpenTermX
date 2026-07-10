@@ -6,7 +6,9 @@ import type {
   CredentialDraft,
   Session,
   SessionDraft,
+  SftpDownloadResult,
   SftpEntry,
+  SftpUploadResult,
   TerminalBootstrap,
   TerminalOutput,
   Tunnel,
@@ -30,12 +32,12 @@ function createId(prefix: string) {
 }
 
 function normalizeRemotePath(path: string) {
-  const trimmed = path.trim();
-  if (!trimmed || trimmed === '/') {
+  const sanitized = path.trim().replace(/\\/g, '/');
+  if (!sanitized || sanitized === '/') {
     return '/';
   }
 
-  return `/${trimmed}`
+  return `/${sanitized}`
     .replace(/\/+/g, '/')
     .replace(/\/$/, '');
 }
@@ -58,6 +60,49 @@ function joinRemotePath(base: string, name: string) {
 
 function getSftpFileKey(sessionId: string, path: string) {
   return `${sessionId}:${normalizeRemotePath(path)}`;
+}
+
+function collectMockDownloadStats(
+  sessionId: string,
+  normalizedPath: string
+): Pick<SftpDownloadResult, 'filesDownloaded' | 'directoriesPrepared' | 'filesSkipped'> {
+  const entry = (sftpMemory[sessionId] ?? []).find((item) => item.path === normalizedPath);
+
+  if (!entry) {
+    return {
+      filesDownloaded: 0,
+      directoriesPrepared: 0,
+      filesSkipped: 1
+    };
+  }
+
+  if (entry.type === 'file') {
+    return {
+      filesDownloaded: 1,
+      directoriesPrepared: 0,
+      filesSkipped: 0
+    };
+  }
+
+  const children = (sftpMemory[sessionId] ?? []).filter(
+    (item) => getParentDirectory(item.path) === normalizedPath
+  );
+
+  return children.reduce(
+    (totals, child) => {
+      const childTotals = collectMockDownloadStats(sessionId, child.path);
+      return {
+        filesDownloaded: totals.filesDownloaded + childTotals.filesDownloaded,
+        directoriesPrepared: totals.directoriesPrepared + childTotals.directoriesPrepared,
+        filesSkipped: totals.filesSkipped + childTotals.filesSkipped
+      };
+    },
+    {
+      filesDownloaded: 0,
+      directoriesPrepared: 1,
+      filesSkipped: 0
+    }
+  );
 }
 
 function buildSession(input: SessionDraft): Session {
@@ -453,6 +498,16 @@ export const desktopApi = {
     sftpFileMemory.set(getSftpFileKey(sessionId, normalizedPath), new Uint8Array(contents));
     return Promise.resolve();
   },
+  async uploadEntries(sessionId: string, remoteDirectory: string): Promise<SftpUploadResult> {
+    if (isTauriRuntime()) {
+      return invoke<SftpUploadResult>('upload_entries', { sessionId, remoteDirectory });
+    }
+
+    return Promise.resolve({
+      cancelled: true,
+      filesUploaded: 0
+    });
+  },
   async downloadFile(sessionId: string, path: string, shellId?: string | null) {
     if (isTauriRuntime()) {
       const payload = await invoke<number[]>('download_file', { sessionId, path, shellId });
@@ -472,5 +527,30 @@ export const desktopApi = {
 
     const fallback = new TextEncoder().encode(`Mock file for ${entry.name}\n`);
     return Promise.resolve(fallback);
+  },
+  async downloadEntries(sessionId: string, paths: string[]): Promise<SftpDownloadResult> {
+    if (isTauriRuntime()) {
+      return invoke<SftpDownloadResult>('download_entries', { sessionId, paths });
+    }
+
+    const totals = paths.reduce<SftpDownloadResult>(
+      (result, path) => {
+        const next = collectMockDownloadStats(sessionId, normalizeRemotePath(path));
+        return {
+          cancelled: false,
+          filesDownloaded: result.filesDownloaded + next.filesDownloaded,
+          directoriesPrepared: result.directoriesPrepared + next.directoriesPrepared,
+          filesSkipped: result.filesSkipped + next.filesSkipped
+        };
+      },
+      {
+        cancelled: false,
+        filesDownloaded: 0,
+        directoriesPrepared: 0,
+        filesSkipped: 0
+      }
+    );
+
+    return Promise.resolve(totals);
   }
 };

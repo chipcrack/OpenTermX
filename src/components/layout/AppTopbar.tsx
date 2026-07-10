@@ -41,7 +41,7 @@ export function AppTopbar() {
   const activeBadge = activeSession ? getEnvironmentAppearance(activeSession.environment).badge : 'CTX';
 
   return (
-    <div className="otx-panel flex flex-col gap-3 px-3 py-3 lg:flex-row lg:items-center lg:justify-between">
+    <div className="otx-panel flex flex-col gap-3 px-3 py-3 min-[852px]:flex-row min-[852px]:items-center min-[852px]:justify-between">
       <div className="flex min-w-0 items-center gap-2.5">
         <img
           src={appIcon}

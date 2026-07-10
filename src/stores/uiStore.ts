@@ -21,10 +21,11 @@ function readStoredTheme(): ThemeMode {
 
 function readStoredSessionsSidebarVisibility() {
   if (typeof window === 'undefined') {
-    return false;
+    return true;
   }
 
-  return window.localStorage.getItem('opentermx-sessions-sidebar-visible') === 'true';
+  const stored = window.localStorage.getItem('opentermx-sessions-sidebar-visible');
+  return stored === null ? true : stored === 'true';
 }
 
 export const useUiStore = create<UiStore>((set, get) => ({
