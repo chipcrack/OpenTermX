@@ -3,7 +3,7 @@ use std::collections::HashSet;
 use std::sync::Mutex;
 
 use chrono::Utc;
-use rusqlite::{params, Connection};
+use rusqlite::{params, Connection, Transaction};
 use tauri::{AppHandle, Manager};
 use thiserror::Error;
 
@@ -14,6 +14,7 @@ use crate::models::{
   SessionUpsertInput,
   TunnelRecord,
   TunnelUpsertInput,
+  WorkspaceTransferData,
 };
 
 #[derive(Debug, Error)]
@@ -107,6 +108,90 @@ impl DatabaseState {
     })?;
 
     rows.collect::<Result<Vec<_>, _>>().map_err(StorageError::from)
+  }
+
+  pub fn export_workspace_data(&self) -> Result<WorkspaceTransferData, StorageError> {
+    let connection = self.connection.lock().map_err(|_| StorageError::StatePoisoned)?;
+
+    let mut credential_statement = connection.prepare(
+      "SELECT id, label, username, password, COALESCE(note, '')
+       FROM credentials
+       ORDER BY label ASC",
+    )?;
+    let credentials = credential_statement
+      .query_map([], |row| {
+        Ok(CredentialUpsertInput {
+          id: Some(row.get(0)?),
+          label: row.get(1)?,
+          username: row.get(2)?,
+          password: row.get(3)?,
+          note: row.get(4)?,
+        })
+      })?
+      .collect::<Result<Vec<_>, _>>()?;
+
+    let mut session_statement = connection.prepare(
+      "SELECT
+         id,
+         name,
+         host,
+         port,
+         username,
+         environment,
+         group_name,
+         color,
+         COALESCE(description, ''),
+         favorite,
+         auth_kind,
+         credential_id,
+         password
+       FROM sessions
+       ORDER BY favorite DESC, group_name ASC, name ASC",
+    )?;
+    let sessions = session_statement
+      .query_map([], |row| {
+        Ok(SessionUpsertInput {
+          id: Some(row.get(0)?),
+          name: row.get(1)?,
+          host: row.get(2)?,
+          port: row.get(3)?,
+          username: row.get(4)?,
+          environment: row.get(5)?,
+          group_name: row.get(6)?,
+          color: row.get(7)?,
+          description: row.get(8)?,
+          favorite: row.get::<_, i64>(9)? == 1,
+          auth_kind: row.get(10)?,
+          credential_id: row.get(11)?,
+          password: row.get(12)?,
+        })
+      })?
+      .collect::<Result<Vec<_>, _>>()?;
+
+    Ok(WorkspaceTransferData {
+      version: 1,
+      exported_at: Utc::now().to_rfc3339(),
+      credentials,
+      sessions,
+    })
+  }
+
+  pub fn import_workspace_data(&self, input: WorkspaceTransferData) -> Result<(), StorageError> {
+    Self::validate_workspace_transfer(&input)?;
+
+    let mut connection = self.connection.lock().map_err(|_| StorageError::StatePoisoned)?;
+    let transaction = connection.transaction()?;
+
+    for credential in &input.credentials {
+      Self::upsert_credential_in_transaction(&transaction, credential)?;
+    }
+
+    for session in &input.sessions {
+      Self::upsert_session_in_transaction(&transaction, session)?;
+    }
+
+    transaction.commit()?;
+    Ok(())
   }
 
   pub fn list_tunnels(&self) -> Result<Vec<TunnelRecord>, StorageError> {
@@ -628,5 +713,172 @@ impl DatabaseState {
     )?;
 
     Ok(exists > 0)
+  }
+
+  fn validate_workspace_transfer(input: &WorkspaceTransferData) -> Result<(), StorageError> {
+    if input.version != 1 {
+      return Err(StorageError::Validation(
+        "La version del archivo no es compatible con esta importacion".to_string(),
+      ));
+    }
+
+    let mut credential_ids = HashSet::new();
+    for credential in &input.credentials {
+      let credential_id = credential.id.as_ref().ok_or_else(|| {
+        StorageError::Validation("Cada credencial importada debe incluir un id".to_string())
+      })?;
+
+      if !credential_ids.insert(credential_id.clone()) {
+        return Err(StorageError::Validation(format!(
+          "La credencial importada '{credential_id}' aparece duplicada"
+        )));
+      }
+    }
+
+    let mut session_ids = HashSet::new();
+    for session in &input.sessions {
+      let session_id = session.id.as_ref().ok_or_else(|| {
+        StorageError::Validation("Cada sesion importada debe incluir un id".to_string())
+      })?;
+
+      if !session_ids.insert(session_id.clone()) {
+        return Err(StorageError::Validation(format!(
+          "La sesion importada '{session_id}' aparece duplicada"
+        )));
+      }
+
+      match session.auth_kind.trim() {
+        "manual" => {}
+        "credential" => {
+          if session
+            .credential_id
+            .as_ref()
+            .map(|value| value.trim().is_empty())
+            .unwrap_or(true)
+          {
+            return Err(StorageError::Validation(format!(
+              "La sesion '{session_id}' requiere una credencial valida"
+            )));
+          }
+        }
+        _ => {
+          return Err(StorageError::Validation(format!(
+            "La sesion '{session_id}' tiene un tipo de autenticacion invalido"
+          )));
+        }
+      }
+    }
+
+    Ok(())
+  }
+
+  fn upsert_credential_in_transaction(
+    transaction: &Transaction<'_>,
+    input: &CredentialUpsertInput,
+  ) -> Result<(), StorageError> {
+    let credential_id = input.id.as_ref().ok_or_else(|| {
+      StorageError::Validation("Cada credencial importada debe incluir un id".to_string())
+    })?;
+
+    transaction.execute(
+      "INSERT INTO credentials (id, label, username, password, note, updated_at)
+       VALUES (?1, ?2, ?3, ?4, ?5, CURRENT_TIMESTAMP)
+       ON CONFLICT(id) DO UPDATE SET
+         label = excluded.label,
+         username = excluded.username,
+         password = excluded.password,
+         note = excluded.note,
+         updated_at = CURRENT_TIMESTAMP",
+      params![
+        credential_id,
+        input.label,
+        input.username,
+        input.password,
+        input.note
+      ],
+    )?;
+
+    Ok(())
+  }
+
+  fn upsert_session_in_transaction(
+    transaction: &Transaction<'_>,
+    input: &SessionUpsertInput,
+  ) -> Result<(), StorageError> {
+    let session_id = input.id.as_ref().ok_or_else(|| {
+      StorageError::Validation("Cada sesion importada debe incluir un id".to_string())
+    })?;
+    let auth_kind = input.auth_kind.trim();
+
+    let (username, password, credential_id) = match auth_kind {
+      "credential" => {
+        let credential_id = input
+          .credential_id
+          .clone()
+          .ok_or_else(|| StorageError::Validation("Selecciona una credencial guardada".to_string()))?;
+        let (credential_username,): (String,) = transaction.query_row(
+          "SELECT username FROM credentials WHERE id = ?1",
+          params![credential_id],
+          |row| Ok((row.get(0)?,)),
+        )?;
+
+        (credential_username, None::<String>, Some(credential_id))
+      }
+      "manual" => {
+        let next_password = match input.password.clone() {
+          Some(value) if !value.trim().is_empty() => Some(value),
+          _ => transaction
+            .query_row(
+              "SELECT password FROM sessions WHERE id = ?1",
+              params![session_id],
+              |row| row.get(0),
+            )
+            .ok(),
+        };
+
+        (input.username.clone(), next_password, None::<String>)
+      }
+      _ => {
+        return Err(StorageError::Validation(
+          "El tipo de autenticacion debe ser manual o credential".to_string(),
+        ));
+      }
+    };
+
+    transaction.execute(
+      "INSERT INTO sessions (id, name, host, port, username, password, auth_kind, credential_id, environment, group_name, color, description, last_connection, favorite, updated_at)
+       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, COALESCE((SELECT last_connection FROM sessions WHERE id = ?1), 'Nunca'), ?13, CURRENT_TIMESTAMP)
+       ON CONFLICT(id) DO UPDATE SET
+         name = excluded.name,
+         host = excluded.host,
+         port = excluded.port,
+         username = excluded.username,
+         password = excluded.password,
+         auth_kind = excluded.auth_kind,
+         credential_id = excluded.credential_id,
+         environment = excluded.environment,
+         group_name = excluded.group_name,
+         color = excluded.color,
+         description = excluded.description,
+         favorite = excluded.favorite,
+         updated_at = CURRENT_TIMESTAMP",
+      params![
+        session_id,
+        input.name,
+        input.host,
+        input.port,
+        username,
+        password,
+        auth_kind,
+        credential_id,
+        input.environment,
+        input.group_name,
+        input.color,
+        input.description,
+        if input.favorite { 1 } else { 0 },
+      ],
+    )?;
+
+    Ok(())
   }
 }

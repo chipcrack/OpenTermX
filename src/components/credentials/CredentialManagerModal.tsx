@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState, type ChangeEvent } from 'react';
 import { Modal } from '../layout/Modal';
 import { useSessionStore } from '../../stores/sessionStore';
-import type { CredentialDraft } from '../../types/entities';
+import type { CredentialDraft, WorkspaceTransferData } from '../../types/entities';
 import styles from './CredentialManagerModal.module.css';
 
 const defaultDraft: CredentialDraft = {
@@ -20,15 +20,23 @@ export function CredentialManagerModal() {
   const openEditCredential = useSessionStore((state) => state.openEditCredential);
   const saveCredential = useSessionStore((state) => state.saveCredential);
   const deleteCredential = useSessionStore((state) => state.deleteCredential);
+  const exportWorkspaceData = useSessionStore((state) => state.exportWorkspaceData);
+  const importWorkspaceData = useSessionStore((state) => state.importWorkspaceData);
   const loading = useSessionStore((state) => state.loading);
 
   const editingCredential =
     credentials.find((credential) => credential.id === editingCredentialId) ?? null;
   const [draft, setDraft] = useState<CredentialDraft>(defaultDraft);
   const [showPassword, setShowPassword] = useState(false);
+  const [transferFeedback, setTransferFeedback] = useState<{
+    kind: 'success' | 'error';
+    text: string;
+  } | null>(null);
+  const importInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     if (!credentialFormOpen) {
+      setTransferFeedback(null);
       return;
     }
 
@@ -48,6 +56,59 @@ export function CredentialManagerModal() {
     setDraft(defaultDraft);
   }, [credentialFormOpen, editingCredential]);
 
+  async function handleExport() {
+    try {
+      setTransferFeedback(null);
+      const savedPath = await exportWorkspaceData();
+
+      if (!savedPath) {
+        setTransferFeedback({
+          kind: 'success',
+          text: 'Exportacion cancelada. No se guardo ningun archivo.'
+        });
+        return;
+      }
+
+      setTransferFeedback({
+        kind: 'success',
+        text: `Exportacion guardada en: ${savedPath}`
+      });
+    } catch (error) {
+      setTransferFeedback({
+        kind: 'error',
+        text: error instanceof Error ? error.message : 'No se pudo exportar la data.'
+      });
+    }
+  }
+
+  async function handleImportSelection(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+
+    if (!file) {
+      return;
+    }
+
+    try {
+      setTransferFeedback(null);
+      const rawText = await file.text();
+      const parsed = JSON.parse(rawText) as WorkspaceTransferData;
+      await importWorkspaceData(parsed);
+      setTransferFeedback({
+        kind: 'success',
+        text: `Importadas ${parsed.credentials?.length ?? 0} credenciales y ${parsed.sessions?.length ?? 0} sesiones.`
+      });
+    } catch (error) {
+      setTransferFeedback({
+        kind: 'error',
+        text:
+          error instanceof Error
+            ? error.message
+            : 'No se pudo importar el archivo seleccionado.'
+      });
+    }
+  }
+
   if (!credentialFormOpen) {
     return null;
   }
@@ -62,10 +123,53 @@ export function CredentialManagerModal() {
         <section className={styles.listPanel}>
           <div className={styles.listHeader}>
             <strong>Guardadas</strong>
-            <button type="button" className={styles.primaryButton} onClick={openCreateCredential}>
-              Nueva credencial
-            </button>
+            <div className={styles.listActions}>
+              <button
+                type="button"
+                className={styles.secondaryButton}
+                onClick={() => importInputRef.current?.click()}
+                disabled={loading}
+              >
+                Importar
+              </button>
+              <button
+                type="button"
+                className={styles.secondaryButton}
+                onClick={() => void handleExport()}
+                disabled={loading}
+              >
+                Exportar
+              </button>
+              <button type="button" className={styles.primaryButton} onClick={openCreateCredential}>
+                Nueva credencial
+              </button>
+            </div>
           </div>
+
+          <input
+            ref={importInputRef}
+            type="file"
+            accept=".json,application/json"
+            className={styles.hiddenInput}
+            onChange={(event) => void handleImportSelection(event)}
+          />
+
+          <p className={styles.transferHint}>
+            La importacion solo actualiza o agrega credenciales y sesiones por `id`. No modifica
+            tuneles.
+          </p>
+
+          {transferFeedback ? (
+            <div
+              className={`${styles.transferFeedback} ${
+                transferFeedback.kind === 'success'
+                  ? styles.transferFeedbackSuccess
+                  : styles.transferFeedbackError
+              }`}
+            >
+              {transferFeedback.text}
+            </div>
+          ) : null}
 
           <div className={styles.list}>
             {credentials.map((credential) => (

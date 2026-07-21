@@ -52,6 +52,22 @@ export interface CredentialDraft {
   note: string;
 }
 
+export interface CredentialTransferData extends CredentialDraft {
+  id: string;
+}
+
+export interface SessionTransferData extends Omit<SessionDraft, 'id' | 'password'> {
+  id: string;
+  password?: string | null;
+}
+
+export interface WorkspaceTransferData {
+  version: number;
+  exportedAt: string;
+  credentials: CredentialTransferData[];
+  sessions: SessionTransferData[];
+}
+
 export interface Tunnel {
   id: string;
   sessionId: string;

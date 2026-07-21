@@ -8,7 +8,8 @@ import type {
   TerminalController,
   TerminalTab,
   Tunnel,
-  TunnelDraft
+  TunnelDraft,
+  WorkspaceTransferData
 } from '../types/entities';
 
 interface SessionStore {
@@ -52,6 +53,8 @@ interface SessionStore {
   closeCredentialForm: () => void;
   saveCredential: (input: CredentialDraft) => Promise<void>;
   deleteCredential: (credentialId: string) => Promise<void>;
+  exportWorkspaceData: () => Promise<string | null>;
+  importWorkspaceData: (input: WorkspaceTransferData) => Promise<void>;
   openCreateTunnel: () => void;
   openEditTunnel: (tunnelId: string) => void;
   closeTunnelForm: () => void;
@@ -478,6 +481,72 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
         loading: false,
         error: error instanceof Error ? error.message : 'No se pudo eliminar la credencial'
       });
+    }
+  },
+  exportWorkspaceData: async () => {
+    set({
+      loading: true,
+      error: null
+    });
+
+    try {
+      const savedPath = await desktopApi.exportWorkspaceDataToFile();
+      set({
+        loading: false
+      });
+      return savedPath;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'No se pudo exportar la data';
+      set({
+        loading: false,
+        error: message
+      });
+      throw error instanceof Error ? error : new Error(message);
+    }
+  },
+  importWorkspaceData: async (input) => {
+    set({
+      loading: true,
+      error: null
+    });
+
+    try {
+      await desktopApi.importWorkspaceData(input);
+
+      const [credentials, sessions, tunnels] = await Promise.all([
+        desktopApi.listCredentials(),
+        desktopApi.listSessions(),
+        desktopApi.listTunnels()
+      ]);
+
+      set((state) => {
+        const existingTabs = state.terminalTabs.filter((tab) =>
+          sessions.some((session) => session.id === tab.sessionId)
+        );
+        const nextTabs = existingTabs.length > 0 ? withNormalizedTabTitles(existingTabs, sessions) : [];
+        const activeTabId =
+          nextTabs.find((tab) => tab.id === state.activeTabId)?.id ?? nextTabs[0]?.id ?? null;
+        const activeSessionId =
+          nextTabs.find((tab) => tab.id === activeTabId)?.sessionId ?? nextTabs[0]?.sessionId ?? null;
+
+        return {
+          credentials,
+          sessions,
+          tunnels,
+          activeSessionId,
+          terminalTabs: nextTabs,
+          activeTabId,
+          loading: false,
+          initialized: true
+        };
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'No se pudo importar la data';
+      set({
+        loading: false,
+        error: message
+      });
+      throw error instanceof Error ? error : new Error(message);
     }
   },
   openCreateTunnel: () => {

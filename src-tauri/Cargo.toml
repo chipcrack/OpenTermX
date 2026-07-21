@@ -1,6 +1,6 @@
 [package]
 name = "opentermx"
-version = "0.1.5"
+version = "0.1.6"
 description = "OpenTermX desktop shell"
 authors = ["OpenTermX"]
 edition = "2021"

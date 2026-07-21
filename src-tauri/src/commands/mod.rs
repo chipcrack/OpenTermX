@@ -3,3 +3,4 @@ pub mod sessions;
 pub mod sftp;
 pub mod ssh;
 pub mod tunnel;
+pub mod workspace_transfer;

@@ -6,13 +6,15 @@ import type {
   CredentialDraft,
   Session,
   SessionDraft,
+  SessionTransferData,
   SftpDownloadResult,
   SftpEntry,
   SftpUploadResult,
   TerminalBootstrap,
   TerminalOutput,
   Tunnel,
-  TunnelDraft
+  TunnelDraft,
+  WorkspaceTransferData
 } from '../types/entities';
 
 let sessionMemory = [...mockSessions];
@@ -26,6 +28,7 @@ let sftpMemory = Object.fromEntries(
 ) as Record<string, SftpEntry[]>;
 const sftpFileMemory = new Map<string, Uint8Array>();
 const shellMemory = new Map<string, { sessionId: string; buffer: string }>();
+const sessionPasswordMemory = new Map<string, string>([['dev-db', 'secret-demo-password']]);
 
 function createId(prefix: string) {
   return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
@@ -142,6 +145,65 @@ function buildTunnel(input: TunnelDraft): Tunnel {
   };
 }
 
+function buildSessionTransfer(session: Session): SessionTransferData {
+  return {
+    id: session.id,
+    name: session.name,
+    host: session.host,
+    port: session.port,
+    username: session.username,
+    environment: session.environment,
+    groupName: session.groupName,
+    color: session.color,
+    description: session.description,
+    favorite: session.favorite,
+    authKind: session.authKind,
+    credentialId: session.credentialId,
+    password:
+      session.authKind === 'manual' ? sessionPasswordMemory.get(session.id) ?? null : null
+  };
+}
+
+function validateWorkspaceTransferData(input: WorkspaceTransferData) {
+  if (input.version !== 1) {
+    throw new Error('La version del archivo no es compatible con esta importacion');
+  }
+
+  const credentialIds = new Set<string>();
+  for (const credential of input.credentials) {
+    if (!credential.id?.trim()) {
+      throw new Error('Cada credencial importada debe incluir un id');
+    }
+
+    if (credentialIds.has(credential.id)) {
+      throw new Error(`La credencial importada '${credential.id}' aparece duplicada`);
+    }
+
+    credentialIds.add(credential.id);
+  }
+
+  const sessionIds = new Set<string>();
+  for (const session of input.sessions) {
+    if (!session.id?.trim()) {
+      throw new Error('Cada sesion importada debe incluir un id');
+    }
+
+    if (sessionIds.has(session.id)) {
+      throw new Error(`La sesion importada '${session.id}' aparece duplicada`);
+    }
+
+    sessionIds.add(session.id);
+
+    if (session.authKind === 'credential' && !session.credentialId?.trim()) {
+      throw new Error(`La sesion '${session.id}' requiere una credencial valida`);
+    }
+
+    if (session.authKind !== 'credential' && session.authKind !== 'manual') {
+      throw new Error(`La sesion '${session.id}' tiene un tipo de autenticacion invalido`);
+    }
+  }
+}
+
 export const desktopApi = {
   async listCredentials() {
     if (isTauriRuntime()) {
@@ -197,8 +259,28 @@ export const desktopApi = {
       return invoke<Session>('save_session', { input });
     }
 
-    const nextSession = buildSession(input);
+    const existingPassword = input.id ? sessionPasswordMemory.get(input.id) : undefined;
+    const nextPassword =
+      input.authKind === 'manual'
+        ? input.password && input.password.trim().length > 0
+          ? input.password
+          : existingPassword
+        : undefined;
+    const nextSession = buildSession({
+      ...input,
+      password: nextPassword
+    });
     const existingIndex = sessionMemory.findIndex((session) => session.id === nextSession.id);
+
+    if (nextSession.authKind === 'manual') {
+      if (nextPassword && nextPassword.trim().length > 0) {
+        sessionPasswordMemory.set(nextSession.id, nextPassword);
+      } else {
+        sessionPasswordMemory.delete(nextSession.id);
+      }
+    } else {
+      sessionPasswordMemory.delete(nextSession.id);
+    }
 
     if (existingIndex >= 0) {
       sessionMemory[existingIndex] = {
@@ -218,6 +300,7 @@ export const desktopApi = {
 
     sessionMemory = sessionMemory.filter((session) => session.id !== id);
     tunnelMemory = tunnelMemory.filter((tunnel) => tunnel.sessionId !== id);
+    sessionPasswordMemory.delete(id);
     return Promise.resolve();
   },
   async listTunnels() {
@@ -252,6 +335,116 @@ export const desktopApi = {
     }
 
     tunnelMemory = tunnelMemory.filter((tunnel) => tunnel.id !== id);
+    return Promise.resolve();
+  },
+  async exportWorkspaceData() {
+    if (isTauriRuntime()) {
+      return invoke<WorkspaceTransferData>('export_workspace_data');
+    }
+
+    return Promise.resolve({
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      credentials: credentialMemory.map((credential) => ({
+        id: credential.id,
+        label: credential.label,
+        username: credential.username,
+        password: credential.password,
+        note: credential.note
+      })),
+      sessions: sessionMemory.map((session) => buildSessionTransfer(session))
+    });
+  },
+  async exportWorkspaceDataToFile() {
+    if (isTauriRuntime()) {
+      return invoke<string | null>('export_workspace_data_to_file');
+    }
+
+    const data = await this.exportWorkspaceData();
+    const blob = new Blob([JSON.stringify(data, null, 2)], {
+      type: 'application/json'
+    });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    const fileName = `opentermx-credenciales-sesiones-${new Date().toISOString().slice(0, 10)}.json`;
+    link.href = url;
+    link.download = fileName;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+    return Promise.resolve(fileName);
+  },
+  async importWorkspaceData(input: WorkspaceTransferData) {
+    if (isTauriRuntime()) {
+      return invoke<void>('import_workspace_data', { input });
+    }
+
+    validateWorkspaceTransferData(input);
+
+    const nextCredentials = [...credentialMemory];
+    for (const credential of input.credentials) {
+      const normalizedCredential: Credential = {
+        id: credential.id,
+        label: credential.label,
+        username: credential.username,
+        password: credential.password,
+        note: credential.note
+      };
+      const existingIndex = nextCredentials.findIndex((item) => item.id === normalizedCredential.id);
+
+      if (existingIndex >= 0) {
+        nextCredentials[existingIndex] = normalizedCredential;
+      } else {
+        nextCredentials.unshift(normalizedCredential);
+      }
+    }
+    credentialMemory = nextCredentials;
+
+    const nextSessions = [...sessionMemory];
+    for (const session of input.sessions) {
+      const existingPassword = sessionPasswordMemory.get(session.id);
+      const resolvedPassword =
+        session.authKind === 'manual'
+          ? session.password && session.password.trim().length > 0
+            ? session.password
+            : existingPassword
+          : undefined;
+
+      const normalizedSession = buildSession({
+        ...session,
+        password: resolvedPassword ?? undefined
+      });
+
+      if (
+        normalizedSession.authKind === 'credential' &&
+        !credentialMemory.some((credential) => credential.id === normalizedSession.credentialId)
+      ) {
+        throw new Error(`La sesion '${normalizedSession.id}' requiere una credencial valida`);
+      }
+
+      if (normalizedSession.authKind === 'manual') {
+        if (resolvedPassword && resolvedPassword.trim().length > 0) {
+          sessionPasswordMemory.set(normalizedSession.id, resolvedPassword);
+        } else {
+          sessionPasswordMemory.delete(normalizedSession.id);
+        }
+      } else {
+        sessionPasswordMemory.delete(normalizedSession.id);
+      }
+
+      const existingIndex = nextSessions.findIndex((item) => item.id === normalizedSession.id);
+      if (existingIndex >= 0) {
+        nextSessions[existingIndex] = {
+          ...nextSessions[existingIndex],
+          ...normalizedSession
+        };
+      } else {
+        nextSessions.unshift(normalizedSession);
+      }
+    }
+
+    sessionMemory = nextSessions;
     return Promise.resolve();
   },
   async bootstrapTerminal(sessionId: string, cols?: number, rows?: number) {
