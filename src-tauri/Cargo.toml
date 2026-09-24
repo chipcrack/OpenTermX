@@ -1,6 +1,6 @@
 [package]
 name = "opentermx"
-version = "0.1.7"
+version = "0.1.8"
 description = "OpenTermX desktop shell"
 authors = ["OpenTermX"]
 edition = "2021"
@@ -23,3 +23,8 @@ serde_json = "1"
 ssh2 = { version = "0.9", features = ["vendored-openssl"] }
 tauri = { version = "2", features = [] }
 thiserror = "1"
+
+# vendored-openssl bundles OpenSSL; Windows also needs this feature to select
+# it instead of WinCNG. Linux and macOS retain their existing SSH backend.
+[target.'cfg(windows)'.dependencies]
+ssh2 = { version = "0.9", features = ["openssl-on-win32"] }

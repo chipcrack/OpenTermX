@@ -91,6 +91,11 @@ jobs:
       - name: Install frontend dependencies
         run: npm install
 
+      - name: Verify SSH crypto compatibility
+        run: |
+          npm run build
+          cargo test --manifest-path src-tauri/Cargo.toml --locked --release --test ssh_crypto
+
       - name: Build and publish Tauri bundles
         uses: tauri-apps/tauri-action@v0
         env:
