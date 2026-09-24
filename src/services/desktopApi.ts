@@ -1,4 +1,4 @@
-import { invoke } from '@tauri-apps/api/core';
+import { invokeWithHostKeyVerification as invoke } from './hostKeyTrust';
 import { mockCredentials, mockSessions, mockSftpEntries, mockTunnels } from './mockData';
 import { isTauriRuntime } from './runtime';
 import type {

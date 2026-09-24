@@ -15,6 +15,7 @@ use ssh2::{RenameFlags, Session};
 
 use crate::commands::ssh::TerminalManager;
 use crate::storage::{DatabaseState, SessionAuth};
+use crate::host_keys::HostKeyStore;
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -90,7 +91,7 @@ fn auth_signature(auth: &SessionAuth) -> String {
   format!("{}:{}:{}:{}", auth.host, auth.port, auth.username, auth.password.len())
 }
 
-fn connect_authenticated_session(auth: &SessionAuth) -> Result<Session, String> {
+fn connect_authenticated_session(auth: &SessionAuth, host_keys: &HostKeyStore) -> Result<Session, String> {
   let address = format!("{}:{}", auth.host, auth.port);
   let socket_address = address
     .to_socket_addrs()
@@ -108,6 +109,7 @@ fn connect_authenticated_session(auth: &SessionAuth) -> Result<Session, String> 
   ssh.set_tcp_stream(tcp);
   ssh.handshake()
     .map_err(|error| format!("Handshake SSH fallido para SFTP: {error}"))?;
+  host_keys.verify(&ssh, &auth.host, auth.port)?;
   ssh.set_keepalive(true, 30);
   ssh.userauth_password(&auth.username, &auth.password)
     .map_err(|error| format!("Autenticacion SSH fallida para SFTP: {error}"))?;
@@ -119,8 +121,8 @@ fn connect_authenticated_session(auth: &SessionAuth) -> Result<Session, String> 
   Ok(ssh)
 }
 
-fn connect_persistent_sftp_session(auth: &SessionAuth) -> Result<PersistentSftpSession, String> {
-  let ssh = connect_authenticated_session(auth)?;
+fn connect_persistent_sftp_session(auth: &SessionAuth, host_keys: &HostKeyStore) -> Result<PersistentSftpSession, String> {
+  let ssh = connect_authenticated_session(auth, host_keys)?;
   let sftp = ssh
     .sftp()
     .map_err(|error| format!("No se pudo abrir el canal SFTP persistente: {error}"))?;
@@ -385,6 +387,7 @@ fn with_persistent_sftp<T>(
   session_id: &str,
   auth: &SessionAuth,
   manager: tauri::State<'_, SftpManager>,
+  host_keys: &HostKeyStore,
   callback: impl Fn(&ssh2::Sftp) -> Result<T, String>,
 ) -> Result<T, String> {
   let signature = auth_signature(auth);
@@ -399,7 +402,7 @@ fn with_persistent_sftp<T>(
     .unwrap_or(true);
 
   if needs_reconnect {
-    sessions.insert(session_id.to_string(), connect_persistent_sftp_session(auth)?);
+    sessions.insert(session_id.to_string(), connect_persistent_sftp_session(auth, host_keys)?);
   }
 
   let attempt = |session: &PersistentSftpSession| -> Result<T, String> {
@@ -414,7 +417,7 @@ fn with_persistent_sftp<T>(
     Some(session) => match attempt(session) {
       Ok(result) => Ok(result),
       Err(first_error) => {
-        sessions.insert(session_id.to_string(), connect_persistent_sftp_session(auth)?);
+        sessions.insert(session_id.to_string(), connect_persistent_sftp_session(auth, host_keys)?);
 
         match sessions.get(session_id) {
           Some(session) => attempt(session).map_err(|second_error| {
@@ -436,12 +439,13 @@ pub fn list_directory(
   state: tauri::State<'_, DatabaseState>,
   terminals: tauri::State<'_, TerminalManager>,
   sftp_manager: tauri::State<'_, SftpManager>,
+  host_keys: tauri::State<'_, HostKeyStore>,
 ) -> Result<Vec<SftpEntry>, String> {
   let _ = shell_id;
   let _ = terminals;
 
   with_session_auth(session_id, state, |auth| {
-    with_persistent_sftp(session_id, auth, sftp_manager, |sftp| {
+    with_persistent_sftp(session_id, auth, sftp_manager, &host_keys, |sftp| {
       let target_path = path
         .filter(|value| !value.trim().is_empty())
         .map(normalize_remote_path)
@@ -507,12 +511,13 @@ pub fn create_directory(
   state: tauri::State<'_, DatabaseState>,
   terminals: tauri::State<'_, TerminalManager>,
   sftp_manager: tauri::State<'_, SftpManager>,
+  host_keys: tauri::State<'_, HostKeyStore>,
 ) -> Result<(), String> {
   let _ = shell_id;
   let _ = terminals;
 
   with_session_auth(session_id, state, |auth| {
-    with_persistent_sftp(session_id, auth, sftp_manager, |sftp| {
+    with_persistent_sftp(session_id, auth, sftp_manager, &host_keys, |sftp| {
       sftp
         .mkdir(Path::new(path), 0o755)
         .map_err(|error| format!("No se pudo crear la carpeta {path}: {error}"))
@@ -529,12 +534,13 @@ pub fn rename_entry(
   state: tauri::State<'_, DatabaseState>,
   terminals: tauri::State<'_, TerminalManager>,
   sftp_manager: tauri::State<'_, SftpManager>,
+  host_keys: tauri::State<'_, HostKeyStore>,
 ) -> Result<(), String> {
   let _ = shell_id;
   let _ = terminals;
 
   with_session_auth(session_id, state, |auth| {
-    with_persistent_sftp(session_id, auth, sftp_manager, |sftp| {
+    with_persistent_sftp(session_id, auth, sftp_manager, &host_keys, |sftp| {
       sftp
         .rename(
           Path::new(from_path),
@@ -555,12 +561,13 @@ pub fn delete_entry(
   state: tauri::State<'_, DatabaseState>,
   terminals: tauri::State<'_, TerminalManager>,
   sftp_manager: tauri::State<'_, SftpManager>,
+  host_keys: tauri::State<'_, HostKeyStore>,
 ) -> Result<(), String> {
   let _ = shell_id;
   let _ = terminals;
 
   with_session_auth(session_id, state, |auth| {
-    with_persistent_sftp(session_id, auth, sftp_manager, |sftp| match entry_type {
+    with_persistent_sftp(session_id, auth, sftp_manager, &host_keys, |sftp| match entry_type {
       "directory" => sftp
         .rmdir(Path::new(path))
         .map_err(|error| format!("No se pudo eliminar la carpeta {path}: {error}")),
@@ -580,12 +587,13 @@ pub fn upload_file(
   state: tauri::State<'_, DatabaseState>,
   terminals: tauri::State<'_, TerminalManager>,
   sftp_manager: tauri::State<'_, SftpManager>,
+  host_keys: tauri::State<'_, HostKeyStore>,
 ) -> Result<(), String> {
   let _ = shell_id;
   let _ = terminals;
 
   with_session_auth(session_id, state, |auth| {
-    with_persistent_sftp(session_id, auth, sftp_manager, |sftp| {
+    with_persistent_sftp(session_id, auth, sftp_manager, &host_keys, |sftp| {
       let mut remote_file = sftp
         .create(Path::new(remote_path))
         .map_err(|error| format!("No se pudo crear el archivo remoto {remote_path}: {error}"))?;
@@ -603,6 +611,7 @@ pub fn upload_entries(
   remote_directory: &str,
   state: tauri::State<'_, DatabaseState>,
   sftp_manager: tauri::State<'_, SftpManager>,
+  host_keys: tauri::State<'_, HostKeyStore>,
 ) -> Result<SftpUploadResult, String> {
   let selected_files = pick_upload_files()?;
 
@@ -616,7 +625,7 @@ pub fn upload_entries(
   let normalized_remote_directory = normalize_remote_path(remote_directory);
 
   with_session_auth(session_id, state, |auth| {
-    with_persistent_sftp(session_id, auth, sftp_manager, |sftp| {
+    with_persistent_sftp(session_id, auth, sftp_manager, &host_keys, |sftp| {
       let mut files_uploaded = 0;
 
       for local_path in &selected_files {
@@ -657,12 +666,13 @@ pub fn download_file(
   state: tauri::State<'_, DatabaseState>,
   terminals: tauri::State<'_, TerminalManager>,
   sftp_manager: tauri::State<'_, SftpManager>,
+  host_keys: tauri::State<'_, HostKeyStore>,
 ) -> Result<Vec<u8>, String> {
   let _ = shell_id;
   let _ = terminals;
 
   with_session_auth(session_id, state, |auth| {
-    with_persistent_sftp(session_id, auth, sftp_manager, |sftp| {
+    with_persistent_sftp(session_id, auth, sftp_manager, &host_keys, |sftp| {
       let mut remote_file = sftp
         .open(Path::new(path))
         .map_err(|error| format!("No se pudo abrir el archivo remoto {path}: {error}"))?;
@@ -683,6 +693,7 @@ pub fn download_entries(
   paths: Vec<String>,
   state: tauri::State<'_, DatabaseState>,
   sftp_manager: tauri::State<'_, SftpManager>,
+  host_keys: tauri::State<'_, HostKeyStore>,
 ) -> Result<SftpDownloadResult, String> {
   if paths.is_empty() {
     return Ok(SftpDownloadResult {
@@ -703,7 +714,7 @@ pub fn download_entries(
   };
 
   with_session_auth(session_id, state, |auth| {
-    with_persistent_sftp(session_id, auth, sftp_manager, |sftp| {
+    with_persistent_sftp(session_id, auth, sftp_manager, &host_keys, |sftp| {
       let mut result = SftpDownloadResult {
         cancelled: false,
         files_downloaded: 0,

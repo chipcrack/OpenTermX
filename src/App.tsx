@@ -1,6 +1,8 @@
 import { useEffect } from 'react';
 import { WorkspacePage } from './pages/WorkspacePage';
 import { useUiStore } from './stores/uiStore';
+import { HostKeyDialog } from './components/terminal/HostKeyDialog';
+import { shouldBlockTerminalReload } from './utils/terminalShortcuts';
 
 export default function App() {
   const theme = useUiStore((state) => state.theme);
@@ -13,8 +15,8 @@ export default function App() {
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      const key = event.key.toLowerCase();
-      const reloadShortcut = key === 'f5' || ((event.ctrlKey || event.metaKey) && key === 'r');
+      const insideTerminal = event.target instanceof Element && Boolean(event.target.closest('.xterm'));
+      const reloadShortcut = shouldBlockTerminalReload(event, insideTerminal);
 
       if (!reloadShortcut) {
         return;
@@ -31,5 +33,5 @@ export default function App() {
     };
   }, []);
 
-  return <WorkspacePage />;
+  return <><WorkspacePage /><HostKeyDialog /></>;
 }

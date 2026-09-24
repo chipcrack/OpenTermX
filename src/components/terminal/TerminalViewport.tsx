@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import '@xterm/xterm/css/xterm.css';
 import { desktopApi } from '../../services/desktopApi';
 import { isTauriRuntime } from '../../services/runtime';
+import { HostKeyVerificationError } from '../../services/hostKeyProtocol';
+import { DEFAULT_TERMINAL_FONT_SIZE, terminalZoomAction } from '../../utils/terminalShortcuts';
 import { useSessionStore } from '../../stores/sessionStore';
 import { useUiStore } from '../../stores/uiStore';
 import type { Session, ThemeMode } from '../../types/entities';
@@ -231,6 +233,7 @@ export function TerminalViewport({ session, tabId, isActive }: TerminalViewportP
   const reconnectTimerRef = useRef<number | null>(null);
   const resizeObserverRef = useRef<ResizeObserver | null>(null);
   const inputDisposableRef = useRef<{ dispose: () => void } | null>(null);
+  const resizeDisposableRef = useRef<{ dispose: () => void } | null>(null);
   const syncTransportLoopRef = useRef<((forceFlush?: boolean) => void) | null>(null);
   const streamOutputModeRef = useRef(false);
   const streamOutputUnlistenRef = useRef<(() => void) | null>(null);
@@ -257,6 +260,19 @@ export function TerminalViewport({ session, tabId, isActive }: TerminalViewportP
   const registerTerminalController = useSessionStore((state) => state.registerTerminalController);
   const unregisterTerminalController = useSessionStore((state) => state.unregisterTerminalController);
   const themeMode = useUiStore((state) => state.theme);
+  const terminalFontSize = useUiStore((state) => state.terminalFontSize);
+
+  useEffect(() => {
+    const terminal = terminalRef.current;
+    if (!terminal) return;
+    terminal.options.fontSize = terminalFontSize;
+    if (isActive && containerRef.current && fitAddonRef.current) {
+      fitTerminalViewport(containerRef.current, terminal, fitAddonRef.current);
+      if (shellIdRef.current) {
+        void desktopApi.resizeTerminal(shellIdRef.current, terminal.cols, terminal.rows).catch(() => undefined);
+      }
+    }
+  }, [terminalFontSize, isActive]);
 
   useEffect(() => {
     if (!terminalRef.current) {
@@ -344,6 +360,8 @@ export function TerminalViewport({ session, tabId, isActive }: TerminalViewportP
       resizeObserverRef.current = null;
       inputDisposableRef.current?.dispose();
       inputDisposableRef.current = null;
+      resizeDisposableRef.current?.dispose();
+      resizeDisposableRef.current = null;
       streamOutputUnlistenRef.current?.();
       streamOutputUnlistenRef.current = null;
       streamCloseUnlistenRef.current?.();
@@ -387,7 +405,7 @@ export function TerminalViewport({ session, tabId, isActive }: TerminalViewportP
           cursorBlink: true,
           cursorStyle: 'bar',
           fontFamily: 'JetBrains Mono, Menlo, Monaco, Consolas, monospace',
-          fontSize: 13,
+          fontSize: useUiStore.getState().terminalFontSize,
           fontWeight: '500',
           fontWeightBold: '700',
           lineHeight: 1.15,
@@ -403,6 +421,12 @@ export function TerminalViewport({ session, tabId, isActive }: TerminalViewportP
 
         terminalRef.current = terminal;
         fitAddonRef.current = fitAddon;
+        // Includes the final asynchronous fit after a zoom or container resize.
+        resizeDisposableRef.current = terminal.onResize(({ cols, rows }) => {
+          if (!disposed && shellIdRef.current && !transportClosedRef.current) {
+            void desktopApi.resizeTerminal(shellIdRef.current, cols, rows).catch(() => undefined);
+          }
+        });
         bootstrappedRef.current = true;
         manualCloseRef.current = false;
         transportClosedRef.current = false;
@@ -840,8 +864,17 @@ export function TerminalViewport({ session, tabId, isActive }: TerminalViewportP
           } catch (error) {
             setTabConnection(tabId, false);
             setTabShellId(tabId, null);
+            // scheduleReconnect refuses to run while an open attempt is active.
+            openingRef.current = false;
 
-            if (hasConnectedRef.current && !disposed && !manualCloseRef.current) {
+            if (error instanceof HostKeyVerificationError) {
+              clearReconnectTimer();
+              setTabReconnecting(tabId, false);
+              if (!disposed) {
+                updateStatus('Verificacion SSH detenida', error.message);
+                writeStatusLine(error.message);
+              }
+            } else if (hasConnectedRef.current && !disposed && !manualCloseRef.current) {
               scheduleReconnect(`Error de reconexion: ${describeError(error)}`);
             } else if (!disposed) {
               const message = describeError(error);
@@ -937,6 +970,16 @@ export function TerminalViewport({ session, tabId, isActive }: TerminalViewportP
         });
 
         terminal.attachCustomKeyEventHandler((event: KeyboardEvent) => {
+          // xterm also calls this handler for keypress/keyup; act only once.
+          if (event.type !== 'keydown') return true;
+          const zoom = terminalZoomAction(event);
+          if (zoom) {
+            event.preventDefault();
+            event.stopPropagation();
+            const ui = useUiStore.getState();
+            ui.setTerminalFontSize(zoom === 'reset' ? DEFAULT_TERMINAL_FONT_SIZE : ui.terminalFontSize + (zoom === 'in' ? 1 : -1));
+            return false;
+          }
           const isModifier = event.ctrlKey || event.metaKey;
           const key = event.key.toLowerCase();
 
@@ -1099,6 +1142,12 @@ export function TerminalViewport({ session, tabId, isActive }: TerminalViewportP
           onMouseDown={(event) => event.stopPropagation()}
           onClick={(event) => event.stopPropagation()}
         >
+          <div className="flex items-center justify-between gap-2 border-b border-[var(--otx-border)] px-3 py-2 text-sm">
+            <span>Letra: {terminalFontSize}px</span>
+            <button type="button" aria-label="Reducir letra" title="Ctrl/Cmd -" onClick={() => useUiStore.getState().setTerminalFontSize(terminalFontSize - 1)}>−</button>
+            <button type="button" aria-label="Restablecer letra" title="Ctrl/Cmd 0" onClick={() => useUiStore.getState().setTerminalFontSize(DEFAULT_TERMINAL_FONT_SIZE)}>100%</button>
+            <button type="button" aria-label="Aumentar letra" title="Ctrl/Cmd +" onClick={() => useUiStore.getState().setTerminalFontSize(terminalFontSize + 1)}>+</button>
+          </div>
           <button
             type="button"
             className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm hover:bg-[var(--otx-brand-soft)]"

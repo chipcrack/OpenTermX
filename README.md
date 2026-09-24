@@ -96,6 +96,25 @@ Si ya tienes `npm run dev` corriendo en otra terminal, `npm run tauri dev` reuti
 
 ## Prueba manual recomendada
 
+### Identidad SSH y zoom
+
+- La primera conexion SSH o SFTP solicita confirmar la huella SHA-256 del servidor. Comparala por un canal independiente con el administrador antes de aceptar. No se envia la contraseña antes de verificar la clave.
+- Las claves aceptadas se guardan en `known-hosts.sqlite3`, dentro del directorio de datos de OpenTermX que Tauri resuelve para cada sistema operativo. Terminal y SFTP comparten este almacen, independiente de las exportaciones de sesiones y del `known_hosts` de OpenSSH.
+- Si la clave cambia, la conexion se bloquea y muestra las huellas guardada y recibida. No se sustituye automaticamente ni se reintenta indefinidamente. Una rotacion legitima requiere verificar el cambio con el administrador; esta version no incluye una interfaz para sustituir claves guardadas.
+- `Ctrl +` / `Ctrl -` aumentan o reducen la letra; `Ctrl 0` restablece 13px. En macOS tambien se puede usar `Cmd`. Se admite el teclado numerico y `Ctrl =`. El tamaño se guarda, se comparte entre pestañas y tambien puede ajustarse desde el menu contextual.
+- El zoom conserva la sesion y ajusta las dimensiones del terminal remoto. `Ctrl+R` permite buscar en el historial de la shell; `Ctrl+Shift+R` reconecta manualmente, `Ctrl+Shift+C/V` copia/pega y `Ctrl+Shift+K` limpia la vista. `Ctrl+C` sin seleccion conserva su funcion de interrupcion remota.
+
+Comprobaciones focalizadas (sin ejecutar suites completas):
+
+```bash
+node --test scripts/terminal-security.test.mjs
+cargo test --manifest-path src-tauri/Cargo.toml --locked --lib host_keys::tests
+```
+
+El workflow `terminal-security.yml` ejecuta estas comprobaciones y el build web en Linux, Windows y macOS. No sustituye una prueba manual del WebView, el portapapeles y un servidor SSH real en cada plataforma.
+
+### Flujo general
+
 Antes de generar instaladores, conviene probar este flujo:
 
 1. Abre la app.

@@ -1,8 +1,11 @@
 import { create } from 'zustand';
 import type { ThemeMode } from '../types/entities';
+import { clampTerminalFontSize, DEFAULT_TERMINAL_FONT_SIZE } from '../utils/terminalShortcuts';
 
 interface UiStore {
   theme: ThemeMode;
+  terminalFontSize: number;
+  setTerminalFontSize: (size: number) => void;
   sessionsSidebarVisible: boolean;
   setTheme: (theme: ThemeMode) => void;
   toggleTheme: () => void;
@@ -30,6 +33,23 @@ function readStoredSessionsSidebarVisibility() {
 
 export const useUiStore = create<UiStore>((set, get) => ({
   theme: readStoredTheme(),
+  terminalFontSize: (() => {
+    try {
+      const stored = window.localStorage.getItem('opentermx-terminal-font-size');
+      return stored === null ? DEFAULT_TERMINAL_FONT_SIZE : clampTerminalFontSize(Number(stored));
+    } catch {
+      return DEFAULT_TERMINAL_FONT_SIZE;
+    }
+  })(),
+  setTerminalFontSize: (size) => {
+    const terminalFontSize = clampTerminalFontSize(size);
+    try {
+      window.localStorage.setItem('opentermx-terminal-font-size', String(terminalFontSize));
+    } catch {
+      // Zoom remains available when persistent browser storage is unavailable.
+    }
+    set({ terminalFontSize });
+  },
   sessionsSidebarVisible: readStoredSessionsSidebarVisibility(),
   setTheme: (theme) => {
     if (typeof window !== 'undefined') {

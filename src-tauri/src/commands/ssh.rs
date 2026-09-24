@@ -14,6 +14,7 @@ use ssh2::{Channel, ExtendedData, KeyboardInteractivePrompt, Prompt, Session as 
 use tauri::{AppHandle, Emitter};
 
 use crate::storage::{DatabaseState, SessionAuth};
+use crate::host_keys::HostKeyStore;
 
 static NEXT_SHELL_ID: AtomicU64 = AtomicU64::new(1);
 
@@ -113,8 +114,8 @@ pub(crate) fn openssh_program_name(binary_name: &str) -> String {
 
 fn build_pty_size(cols: Option<u32>, rows: Option<u32>) -> PtySize {
   PtySize {
-    rows: rows.unwrap_or(32).max(10) as u16,
-    cols: cols.unwrap_or(120).max(40) as u16,
+    rows: rows.unwrap_or(32).clamp(1, u16::MAX as u32) as u16,
+    cols: cols.unwrap_or(120).clamp(2, u16::MAX as u32) as u16,
     pixel_width: 0,
     pixel_height: 0,
   }
@@ -134,7 +135,7 @@ fn is_auth_or_hostkey_prompt(output: &str) -> bool {
     || normalized.contains("(yes/no")
 }
 
-fn connect_authenticated_terminal_session(auth: &SessionAuth) -> Result<SshSession, String> {
+fn connect_authenticated_terminal_session(auth: &SessionAuth, host_keys: &HostKeyStore) -> Result<SshSession, String> {
   let address = format!("{}:{}", auth.host, auth.port);
   let socket_address = address
     .to_socket_addrs()
@@ -153,6 +154,7 @@ fn connect_authenticated_terminal_session(auth: &SessionAuth) -> Result<SshSessi
   ssh.set_tcp_stream(tcp);
   ssh.handshake()
     .map_err(|error| format!("Handshake SSH fallido: {error}"))?;
+  host_keys.verify(&ssh, &auth.host, auth.port)?;
   ssh.set_keepalive(true, 30);
 
   if let Err(password_error) = ssh.userauth_password(&auth.username, &auth.password) {
@@ -255,7 +257,7 @@ fn spawn_terminal_reader(
           }
           Ok(TerminalControl::Resize { cols, rows }) => {
             if let Err(error) =
-              writer_channel.request_pty_size(cols.max(40), rows.max(10), None, None)
+              writer_channel.request_pty_size(cols.clamp(2, u16::MAX as u32), rows.clamp(1, u16::MAX as u32), None, None)
             {
               let message =
                 format!("\r\nOpenTermX no pudo redimensionar el PTY remoto: {error}\r\n");
@@ -559,6 +561,7 @@ pub fn open_terminal(
   cols: Option<u32>,
   rows: Option<u32>,
   app: tauri::AppHandle,
+  host_keys: tauri::State<'_, HostKeyStore>,
   state: tauri::State<'_, DatabaseState>,
   terminals: tauri::State<'_, TerminalManager>,
 ) -> Result<TerminalBootstrap, String> {
@@ -567,7 +570,7 @@ pub fn open_terminal(
     .map_err(|error| error.to_string())?;
   let shell_id = format!("shell-{}", NEXT_SHELL_ID.fetch_add(1, Ordering::Relaxed));
 
-  let ssh = connect_authenticated_terminal_session(&auth)?;
+  let ssh = connect_authenticated_terminal_session(&auth, &host_keys)?;
   let mut channel = ssh
     .channel_session()
     .map_err(|error| format!("No se pudo abrir el canal SSH: {error}"))?;

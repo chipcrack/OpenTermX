@@ -1,6 +1,7 @@
 pub mod commands;
 pub mod models;
 pub mod storage;
+mod host_keys;
 
 use storage::DatabaseState;
 use commands::ssh::TerminalManager;
@@ -28,12 +29,17 @@ pub fn run() {
           Box::new(error)
         })?;
 
+      let trust_path = app.path().app_data_dir()?.join("known-hosts.sqlite3");
+      let host_keys = host_keys::HostKeyStore::open(&trust_path)
+        .map_err(std::io::Error::other)?;
+      app.manage(host_keys);
       app.manage(database_state);
       app.manage(TerminalManager::default());
       app.manage(SftpManager::default());
       Ok(())
     })
     .invoke_handler(tauri::generate_handler![
+      host_keys::resolve_host_key,
       commands::credentials::list_credentials,
       commands::credentials::save_credential,
       commands::credentials::delete_credential,
