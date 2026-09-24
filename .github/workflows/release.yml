@@ -33,13 +33,35 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
-          node-version: 20
+          node-version: 24
           cache: npm
+
+      - name: Validate release tag and app versions
+        shell: bash
+        run: |
+          node --input-type=commonjs <<'NODE'
+          const assert = require('node:assert/strict');
+          const fs = require('node:fs');
+          const readJson = (path) => JSON.parse(fs.readFileSync(path, 'utf8'));
+          const version = readJson('src-tauri/tauri.conf.json').version;
+          assert.equal(process.env.GITHUB_REF_TYPE, 'tag',
+            'Run this workflow on a version tag, including when using workflow_dispatch.');
+          assert.equal(process.env.GITHUB_REF_NAME, `v${version}`,
+            'The release tag must match the version in src-tauri/tauri.conf.json.');
+          assert.equal(readJson('package.json').version, version,
+            'package.json and tauri.conf.json versions must match.');
+          const cargoPackage = fs.readFileSync('src-tauri/Cargo.toml', 'utf8')
+            .split(/^\[package\]\s*$/m)[1]?.split(/^\[/m)[0];
+          const cargoVersion = cargoPackage?.match(/^version\s*=\s*"([^"]+)"/m)?.[1];
+          assert.equal(cargoVersion, version,
+            'Cargo.toml and tauri.conf.json versions must match.');
+          console.log(`Validated release v${version}`);
+          NODE
 
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
@@ -89,8 +111,8 @@ jobs:
           # APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
           # APPLE_SIGNING_IDENTITY: "Developer ID Application: Tu Nombre o Empresa (TEAMID)"
         with:
-          tagName: v__VERSION__
-          releaseName: OpenTermX v__VERSION__
+          tagName: ${{ github.ref_name }}
+          releaseName: OpenTermX ${{ github.ref_name }}
           releaseBody: See the assets attached to this release to install OpenTermX on your platform.
           releaseDraft: true
           prerelease: false
