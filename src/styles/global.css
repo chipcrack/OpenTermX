@@ -133,14 +133,14 @@
   .otx-panel {
     border: 1px solid var(--otx-border);
     background: var(--otx-panel);
-    box-shadow: 0 18px 45px var(--otx-shadow);
-    @apply rounded-3xl backdrop-blur-xl;
+    box-shadow: 0 3px 12px var(--otx-shadow);
+    @apply rounded-xl backdrop-blur-xl;
   }
 
   .otx-panel-muted {
     border: 1px solid var(--otx-border);
     background: var(--otx-surface);
-    @apply rounded-2xl backdrop-blur-xl;
+    @apply rounded-lg backdrop-blur-xl;
   }
 
   .otx-kicker {
@@ -152,14 +152,14 @@
     border: 1px solid var(--otx-border);
     background: var(--otx-brand-soft);
     color: var(--otx-text-soft);
-    @apply inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-medium;
+    @apply inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[11px] font-medium;
   }
 
   .otx-input {
     border: 1px solid var(--otx-border);
     background: var(--otx-input);
     color: var(--otx-text);
-    @apply rounded-xl px-3 py-1.5;
+    @apply rounded-md px-2 py-1;
   }
 
   .otx-button,
@@ -167,7 +167,7 @@
   .otx-button-secondary,
   .otx-button-danger {
     border: 1px solid var(--otx-border);
-    @apply inline-flex items-center justify-center gap-1.5 rounded-xl px-2.5 py-1.5 text-[12px] font-medium;
+    @apply inline-flex items-center justify-center gap-1.5 rounded-md px-2 py-1 text-[12px] font-medium;
   }
 
   .otx-button-primary {

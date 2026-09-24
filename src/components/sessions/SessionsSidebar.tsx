@@ -79,21 +79,11 @@ export function SessionsSidebar() {
   }
 
   return (
-    <div className="flex h-full flex-col gap-2 overflow-hidden p-2.5">
-      <div className="rounded-xl border border-[var(--otx-border)] bg-[var(--otx-panel-strong)] px-2.5 py-2 shadow-panel">
-        <div className="flex items-center gap-2">
-          <span className="inline-flex h-5 w-5 items-center justify-center rounded bg-[var(--otx-brand-soft)] text-[11px] text-[var(--otx-brand)]">
-            U
-          </span>
-          <strong className="text-[12px] font-semibold text-[var(--otx-text)]">User sessions</strong>
-          <span className="ml-auto text-[10px] text-[var(--otx-muted)]">{sessions.length}</span>
-        </div>
-      </div>
-
-      <div className="flex gap-2">
-        <button className="otx-button-primary flex-1" type="button" onClick={openCreateSession}>
-          Nueva sesion
-        </button>
+    <div className="flex h-full flex-col gap-1.5 overflow-hidden p-1.5">
+      <div className="flex min-h-7 shrink-0 items-center gap-2 px-1">
+        <strong className="text-xs font-semibold">Sesiones</strong>
+        <span className="text-[11px] text-[var(--otx-muted)]">{sessions.length}</span>
+        <button className="otx-button-secondary ml-auto h-7 w-7 p-0 text-base" type="button" onClick={openCreateSession} aria-label="Nueva sesion" title="Nueva sesion">+</button>
       </div>
 
       <input
@@ -101,9 +91,10 @@ export function SessionsSidebar() {
         onChange={(event) => setQuery(event.target.value)}
         placeholder="Filtrar"
         className="otx-input w-full text-xs"
+        aria-label="Filtrar sesiones"
       />
 
-      <div className="min-h-0 flex-1 overflow-y-auto rounded-xl border border-[var(--otx-border)] bg-[var(--otx-panel)] px-1.5 py-2 shadow-panel">
+      <div className="min-h-0 flex-1 overflow-y-auto border-t border-[var(--otx-border)] px-0.5 py-1">
         {groupedSessions.map(({ groupName, items }) => {
           const expanded = isExpanded(groupName);
 
@@ -178,7 +169,7 @@ export function SessionsSidebar() {
 
                         <button
                           type="button"
-                          className="shrink-0 border-0 bg-transparent p-0 text-[10px] text-[var(--otx-muted)] opacity-0 transition group-hover:opacity-100 hover:text-[var(--otx-text)]"
+                          className="shrink-0 border-0 bg-transparent p-0 text-[10px] text-[var(--otx-muted)] opacity-0 transition group-hover:opacity-100 group-focus-within:opacity-100 focus:opacity-100 hover:text-[var(--otx-text)]"
                           onClick={() => openEditSession(session.id)}
                         >
                           Edit

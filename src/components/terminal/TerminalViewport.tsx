@@ -433,13 +433,8 @@ export function TerminalViewport({ session, tabId, isActive }: TerminalViewportP
 
         const colors = buildAnsiPalette(themeMode);
         terminal.writeln(
-          `${colors.accent}OpenTermX${colors.reset} ${colors.muted}- terminal remota${colors.reset}`
+          `${colors.muted}OpenTermX · ${session.username}@${session.host}:${session.port}${colors.reset}`
         );
-        terminal.writeln(
-          `${colors.info}${session.username}@${session.host}:${session.port}${colors.reset} ${colors.muted}- ${session.name}${colors.reset}`
-        );
-        terminal.writeln(`${colors.muted}Preparando terminal interactiva...${colors.reset}`);
-        {/*terminal.writeln('');*/}
         setTabStatus(tabId, 'Preparando terminal...', null);
 
         const writeStatusLine = (message: string) => {

@@ -30,37 +30,30 @@ export function AppTopbar() {
   const sessions = useSessionStore((state) => state.sessions);
   const activeSessionId = useSessionStore((state) => state.activeSessionId);
   const sftpVisible = useSessionStore((state) => state.sftpVisible);
-  const tunnelsVisible = useSessionStore((state) => state.tunnelsVisible);
   const openCreateSession = useSessionStore((state) => state.openCreateSession);
   const openCreateCredential = useSessionStore((state) => state.openCreateCredential);
   const toggleSftpPanel = useSessionStore((state) => state.toggleSftpPanel);
-  const toggleTunnelsPanel = useSessionStore((state) => state.toggleTunnelsPanel);
 
   const activeSession = sessions.find((session) => session.id === activeSessionId) ?? null;
   const activeAccent = activeSession ? getSessionAccent(activeSession) : null;
   const activeBadge = activeSession ? getEnvironmentAppearance(activeSession.environment).badge : 'CTX';
 
   return (
-    <div className="otx-panel flex flex-col gap-3 px-3 py-3 min-[852px]:flex-row min-[852px]:items-center min-[852px]:justify-between">
-      <div className="flex min-w-0 items-center gap-2.5">
+    <div className="otx-panel flex min-h-10 flex-wrap items-center justify-between gap-x-3 gap-y-1 px-2 py-1">
+      <div className="flex min-w-0 items-center gap-2">
         <img
           src={appIcon}
           alt="OpenTermX"
-          className="h-10 w-10 rounded-xl border border-white/10 object-cover shadow-panel"
+          className="h-7 w-7 rounded-md object-cover"
         />
         <div className="min-w-0">
-          <p className="otx-kicker m-0"></p>
           <div className="flex min-w-0 items-center gap-2">
             <strong className="truncate text-sm font-semibold">OpenTermX</strong>
             <span className="hidden rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[10px] font-medium text-[var(--otx-text-soft)] md:inline-flex">
               {sessions.length} sesiones
             </span>
           </div>
-          <span className="block truncate text-xs text-[var(--otx-muted)]">
-            {activeSession
-              ? `${activeSession.username}@${activeSession.host}`
-              : 'Workspace operativo para servidores'}
-          </span>
+
         </div>
       </div>
 
@@ -71,12 +64,10 @@ export function AppTopbar() {
         <button type="button" className="otx-button-secondary" onClick={openCreateCredential}>
           Credenciales
         </button>
-        <button type="button" className="otx-button-secondary" onClick={toggleSftpPanel}>
-          {sftpVisible ? 'Ocultar SFTP' : 'Mostrar SFTP'}
+        <button type="button" className="otx-button-secondary" onClick={toggleSftpPanel} aria-pressed={sftpVisible} title={sftpVisible ? 'Ocultar SFTP' : 'Mostrar SFTP'}>
+          SFTP
         </button>
-        {/* <button type="button" className="otx-button-secondary" onClick={toggleTunnelsPanel}>
-          {tunnelsVisible ? 'Ocultar tuneles' : 'Mostrar tuneles'}
-        </button> */}
+
       </nav>
 
       <div className="flex flex-wrap items-center gap-1.5">
@@ -97,12 +88,12 @@ export function AppTopbar() {
         </span>
         <button
           type="button"
-          className="otx-button-secondary h-10 w-10 rounded-full p-0"
+          className="otx-button-secondary h-7 w-7 rounded-md p-0"
           onClick={toggleTheme}
           aria-label={theme === 'dark' ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
           title={theme === 'dark' ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
         >
-          <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-[var(--otx-brand-soft)] text-[var(--otx-brand)]">
+          <span className="inline-flex h-6 w-6 items-center justify-center rounded-md bg-[var(--otx-brand-soft)] text-[var(--otx-brand)]">
             <ThemeIcon theme={theme} />
           </span>
         </button>

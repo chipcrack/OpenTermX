@@ -14,7 +14,7 @@ export function TunnelManager() {
   );
 
   return (
-    <section className="otx-panel-muted flex flex-col gap-3 p-3">
+    <section className="otx-panel-muted flex max-h-[35%] shrink-0 flex-col gap-2 overflow-y-auto p-2">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <p className="otx-kicker m-0">Tunnels</p>
@@ -27,7 +27,7 @@ export function TunnelManager() {
 
       <div className="flex flex-col gap-2">
         {activeTunnels.map((tunnel) => (
-          <article key={tunnel.id} className="rounded-xl border border-[var(--otx-border)] bg-white/[0.03] p-3">
+          <article key={tunnel.id} className="rounded-lg border border-[var(--otx-border)] bg-white/[0.03] p-2">
             <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
               <div>
                 <strong className="block text-[12px] font-semibold">{tunnel.name}</strong>
@@ -46,7 +46,7 @@ export function TunnelManager() {
               </span>
             </div>
 
-            <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+            <div className="mt-2 flex flex-col gap-2 sm:flex-row">
               <button type="button" className="otx-button-secondary" onClick={() => openEditTunnel(tunnel.id)}>
                 Editar
               </button>

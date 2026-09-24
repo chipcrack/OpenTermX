@@ -8,22 +8,15 @@ import { TerminalViewport } from './TerminalViewport';
 
 export function TerminalWorkspace() {
   const sessions = useSessionStore((state) => state.sessions);
-  const tunnels = useSessionStore((state) => state.tunnels);
   const terminalTabs = useSessionStore((state) => state.terminalTabs);
   const activeTabId = useSessionStore((state) => state.activeTabId);
   const activeSessionId = useSessionStore((state) => state.activeSessionId);
   const tunnelsVisible = useSessionStore((state) => state.tunnelsVisible);
-  const openCreateTunnel = useSessionStore((state) => state.openCreateTunnel);
   const sessionsSidebarVisible = useUiStore((state) => state.sessionsSidebarVisible);
 
   const activeSession = useMemo<Session | undefined>(
     () => sessions.find((session) => session.id === activeSessionId),
     [activeSessionId, sessions]
-  );
-
-  const activeTunnels = useMemo(
-    () => tunnels.filter((tunnel) => tunnel.sessionId === activeSessionId),
-    [activeSessionId, tunnels]
   );
 
   const activeTab = terminalTabs.find((tab) => tab.id === activeTabId);
@@ -37,56 +30,12 @@ export function TerminalWorkspace() {
   const extendedStatus = activeTab?.statusText ?? statusLabel;
 
   return (
-    <section className="flex h-full min-h-0 flex-col gap-3 overflow-hidden p-3 max-[851px]:overflow-y-auto">
-      <header className="shrink-0 flex flex-col gap-3 min-[852px]:flex-row min-[852px]:items-start min-[852px]:justify-between">
-        <div>
-          {/*<p className="otx-kicker m-0">Espacio de Trabajo</p>*/}
-          <h2 className="mt-1.5 text-xs font-semibold">{activeSession?.name ?? 'Sin sesion activa'}</h2>
-          <span className="mt-0.5 inline-block break-all text-xs text-[var(--otx-muted)]">
-            {activeSession
-              ? `${activeSession.username}@${activeSession.host}:${activeSession.port}`
-              : 'Selecciona una sesion para abrir una pestana'}
-          </span>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-1.5">
-          <span className="otx-chip">{terminalTabs.length} tabs</span>
-          {/*<span className="otx-chip">{activeTunnels.length} tuneles</span>*/}
-          <span className="otx-chip">{statusLabel}</span>
-          {tunnelsVisible ? (
-            <button type="button" className="otx-button-secondary" onClick={openCreateTunnel}>
-              Nuevo tunel
-            </button>
-          ) : null}
-        </div>
-      </header>
-
-      {/*<div className="shrink-0 flex flex-wrap items-center gap-2">
-        <div className="otx-panel-muted flex items-center gap-2 px-1 py-1">
-          <span className="text-[9px] uppercase tracking-[0.18em] text-[var(--otx-muted)]">Pestanas</span>
-          <strong className="text-[9px] font-semibold">{terminalTabs.length}</strong>
-        </div>
-        {/*<div className="otx-panel-muted flex items-center gap-2 px-3 py-2">
-          <span className="text-[10px] uppercase tracking-[0.18em] text-[var(--otx-muted)]">Tuneles</span>
-          <strong className="text-sm font-semibold">{activeTunnels.length}</strong>
-        </div--->
-        <div className="otx-panel-muted flex items-center gap-2 px-1 py-1">
-          <span className="text-[9px] uppercase tracking-[0.18em] text-[var(--otx-muted)]">Estado</span>
-          <strong className="text-[9px] font-semibold">{extendedStatus}</strong>
-        </div>
-        {activeTab?.lastError ? (
-          <div className="otx-panel-muted flex min-w-[16rem] items-center gap-2 px-3 py-2 text-[var(--otx-danger)]">
-            <span className="text-[10px] uppercase tracking-[0.18em] text-[var(--otx-muted)]">Ultimo error</span>
-            <strong className="truncate text-sm font-semibold">{activeTab.lastError}</strong>
-          </div>
-        ) : null}
-      </div>*/}
-
+    <section className="flex h-full min-h-0 flex-col overflow-hidden max-[851px]:min-h-[18rem]">
       <div className="sr-only" aria-live="polite">
         {extendedStatus}
       </div>
 
-      <div className="flex min-h-[21rem] flex-1 flex-col overflow-hidden rounded-[22px] border border-[var(--otx-border)] bg-[var(--otx-terminal)] shadow-shell max-[851px]:min-h-[24rem]">
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-[var(--otx-terminal)]">
         <TerminalTabs />
         {terminalTabs.length > 0 ? (
           <div className="relative min-h-0 flex-1 overflow-hidden">
@@ -120,6 +69,13 @@ export function TerminalWorkspace() {
         )}
       </div>
 
+      <footer className="flex min-h-6 shrink-0 items-center gap-3 border-t border-[var(--otx-border)] px-2 py-0.5 text-[11px] text-[var(--otx-muted)]">
+        <span className="min-w-0 flex-1 truncate" title={activeSession ? `${activeSession.name} — ${activeSession.username}@${activeSession.host}:${activeSession.port}` : undefined}>
+          {activeSession ? `${activeSession.username}@${activeSession.host}:${activeSession.port}` : 'Selecciona una sesion para conectar'}
+        </span>
+        <span className={`shrink-0 ${activeTab?.lastError ? 'text-[var(--otx-danger)]' : ''}`} title={activeTab?.lastError ?? extendedStatus}>{activeTab?.lastError ? 'Error SSH' : statusLabel}</span>
+        <span className="shrink-0" title="Terminales abiertas">{terminalTabs.length} {terminalTabs.length === 1 ? 'terminal' : 'terminales'}</span>
+      </footer>
       {tunnelsVisible ? <TunnelManager /> : null}
     </section>
   );

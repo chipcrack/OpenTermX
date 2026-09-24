@@ -18,28 +18,28 @@ export function AppShell({
 }: AppShellProps) {
   const toggleSessionsSidebar = useUiStore((state) => state.toggleSessionsSidebar);
   const toggleButtonClassName = sidebarVisible
-    ? 'left-3 md:left-4 min-[852px]:left-[14.5rem]'
-    : 'left-3 md:left-4';
+    ? 'left-1.5 min-[852px]:left-[13.375rem]'
+    : 'left-1.5';
   const contentClassName = [
-    'grid h-full min-h-0 gap-3 px-3 py-3 md:px-4',
+    'grid h-full min-h-0 gap-1.5 p-1.5 max-[851px]:overflow-y-auto',
     sidebarVisible && aside
-      ? 'min-[852px]:grid-cols-[14.5rem_minmax(0,1fr)] xl:grid-cols-[14.5rem_minmax(0,1fr)_19rem]'
+      ? 'min-[852px]:grid-cols-[13rem_minmax(0,1fr)_minmax(14rem,24vw)]'
       : sidebarVisible
-        ? 'min-[852px]:grid-cols-[14.5rem_minmax(0,1fr)]'
+        ? 'min-[852px]:grid-cols-[13rem_minmax(0,1fr)]'
         : aside
-          ? 'min-[852px]:grid-cols-[minmax(0,1fr)_18rem]'
+          ? 'min-[852px]:grid-cols-[minmax(0,1fr)_minmax(14rem,24vw)]'
           : 'grid-cols-1'
   ].join(' ');
 
   return (
     <div className="relative flex h-dvh min-h-dvh flex-col overflow-hidden bg-transparent text-[var(--otx-text)]">
-      {header ? <header className="shrink-0 px-3 pb-0 pt-3 md:px-4">{header}</header> : null}
+      {header ? <header className="shrink-0 px-1.5 pt-1.5">{header}</header> : null}
 
       <div className="relative min-h-0 flex-1">
         <button
           type="button"
           onClick={toggleSessionsSidebar}
-          className={`absolute top-[calc(50%-3rem)] z-30 inline-flex h-24 w-4 appearance-none items-center justify-center rounded-r-2xl border border-[var(--otx-border)] bg-[var(--otx-panel-strong)] text-[var(--otx-muted)] shadow-panel transition-[left,color] duration-150 hover:text-[var(--otx-text)] ${toggleButtonClassName} ${
+          className={`absolute top-[calc(50%-2rem)] z-30 inline-flex h-16 w-3 appearance-none items-center justify-center rounded-r-md border border-[var(--otx-border)] bg-[var(--otx-panel-strong)] text-[var(--otx-muted)] shadow-panel transition-[left,color] duration-150 hover:text-[var(--otx-text)] ${toggleButtonClassName} ${
             sidebarVisible ? '' : 'border-l-0'
           }`}
           title={sidebarVisible ? 'Ocultar panel de sesiones' : 'Mostrar panel de sesiones'}
@@ -52,16 +52,14 @@ export function AppShell({
 
         <div className={contentClassName}>
           {sidebarVisible ? (
-            <aside className="otx-panel min-h-0 overflow-visible">
+            <aside className="otx-panel min-h-0 min-w-0 overflow-visible max-[851px]:max-h-[28dvh]">
               {sidebar}
             </aside>
           ) : null}
-          <main className="otx-panel min-h-0 overflow-hidden">{main}</main>
+          <main className="otx-panel min-h-0 min-w-0 overflow-hidden">{main}</main>
           {aside ? (
             <aside
-              className={`otx-panel min-h-0 overflow-hidden ${
-                sidebarVisible ? 'min-[852px]:col-span-2 xl:col-span-1' : ''
-              }`}
+              className="otx-panel min-h-0 min-w-0 overflow-hidden max-[851px]:min-h-[14rem]"
             >
               {aside}
             </aside>
