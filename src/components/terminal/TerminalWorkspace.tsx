@@ -40,8 +40,8 @@ export function TerminalWorkspace() {
     <section className="flex h-full min-h-0 flex-col gap-3 overflow-hidden p-3 max-[851px]:overflow-y-auto">
       <header className="shrink-0 flex flex-col gap-3 min-[852px]:flex-row min-[852px]:items-start min-[852px]:justify-between">
         <div>
-          <p className="otx-kicker m-0">Workspace</p>
-          <h2 className="mt-1.5 text-lg font-semibold">{activeSession?.name ?? 'Sin sesion activa'}</h2>
+          {/*<p className="otx-kicker m-0">Espacio de Trabajo</p>*/}
+          <h2 className="mt-1.5 text-xs font-semibold">{activeSession?.name ?? 'Sin sesion activa'}</h2>
           <span className="mt-0.5 inline-block break-all text-xs text-[var(--otx-muted)]">
             {activeSession
               ? `${activeSession.username}@${activeSession.host}:${activeSession.port}`
@@ -61,18 +61,18 @@ export function TerminalWorkspace() {
         </div>
       </header>
 
-      <div className="shrink-0 flex flex-wrap items-center gap-2">
-        <div className="otx-panel-muted flex items-center gap-2 px-3 py-2">
-          <span className="text-[10px] uppercase tracking-[0.18em] text-[var(--otx-muted)]">Pestanas</span>
-          <strong className="text-sm font-semibold">{terminalTabs.length}</strong>
+      {/*<div className="shrink-0 flex flex-wrap items-center gap-2">
+        <div className="otx-panel-muted flex items-center gap-2 px-1 py-1">
+          <span className="text-[9px] uppercase tracking-[0.18em] text-[var(--otx-muted)]">Pestanas</span>
+          <strong className="text-[9px] font-semibold">{terminalTabs.length}</strong>
         </div>
         {/*<div className="otx-panel-muted flex items-center gap-2 px-3 py-2">
           <span className="text-[10px] uppercase tracking-[0.18em] text-[var(--otx-muted)]">Tuneles</span>
           <strong className="text-sm font-semibold">{activeTunnels.length}</strong>
-        </div>*/}
-        <div className="otx-panel-muted flex items-center gap-2 px-3 py-2">
-          <span className="text-[10px] uppercase tracking-[0.18em] text-[var(--otx-muted)]">Estado</span>
-          <strong className="text-sm font-semibold">{extendedStatus}</strong>
+        </div--->
+        <div className="otx-panel-muted flex items-center gap-2 px-1 py-1">
+          <span className="text-[9px] uppercase tracking-[0.18em] text-[var(--otx-muted)]">Estado</span>
+          <strong className="text-[9px] font-semibold">{extendedStatus}</strong>
         </div>
         {activeTab?.lastError ? (
           <div className="otx-panel-muted flex min-w-[16rem] items-center gap-2 px-3 py-2 text-[var(--otx-danger)]">
@@ -80,13 +80,8 @@ export function TerminalWorkspace() {
             <strong className="truncate text-sm font-semibold">{activeTab.lastError}</strong>
           </div>
         ) : null}
-      </div>
+      </div>*/}
 
-      {activeTab?.lastEventAt ? (
-        <div className="shrink-0 text-xs text-[var(--otx-muted)]">
-          Ultima actividad de terminal: {new Date(activeTab.lastEventAt).toLocaleString()}
-        </div>
-      ) : null}
       <div className="sr-only" aria-live="polite">
         {extendedStatus}
       </div>

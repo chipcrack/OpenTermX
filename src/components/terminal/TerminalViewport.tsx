@@ -219,6 +219,7 @@ function toControlCharacter(key: string) {
 export function TerminalViewport({ session, tabId, isActive }: TerminalViewportProps) {
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const contextMenuRef = useRef<HTMLDivElement | null>(null);
   const terminalRef = useRef<any>(null);
   const fitAddonRef = useRef<any>(null);
   const shellIdRef = useRef<string | null>(null);
@@ -425,7 +426,34 @@ export function TerminalViewport({ session, tabId, isActive }: TerminalViewportP
         };
 
         const writeClipboardText = async (text: string) => {
-          await navigator.clipboard.writeText(text);
+          if (navigator.clipboard?.writeText) {
+            try {
+              await navigator.clipboard.writeText(text);
+              return;
+            } catch {
+              // Fallback for desktop webviews where the async clipboard API is flaky.
+            }
+          }
+
+          const textarea = document.createElement('textarea');
+          textarea.value = text;
+          textarea.setAttribute('readonly', 'true');
+          textarea.style.position = 'fixed';
+          textarea.style.top = '-9999px';
+          textarea.style.left = '-9999px';
+          textarea.style.opacity = '0';
+          document.body.appendChild(textarea);
+          textarea.focus();
+          textarea.select();
+
+          try {
+            const copied = document.execCommand('copy');
+            if (!copied) {
+              throw new Error('el sistema rechazo la operacion de copiado');
+            }
+          } finally {
+            textarea.remove();
+          }
         };
 
         const readClipboardText = async () => navigator.clipboard.readText();
@@ -912,6 +940,12 @@ export function TerminalViewport({ session, tabId, isActive }: TerminalViewportP
           const isModifier = event.ctrlKey || event.metaKey;
           const key = event.key.toLowerCase();
 
+          if (isModifier && !event.shiftKey && key === 'v') {
+            event.preventDefault();
+            void pasteClipboardIntoTerminal();
+            return false;
+          }
+
           if (isModifier && event.shiftKey && key === 'v') {
             event.preventDefault();
             void pasteClipboardIntoTerminal();
@@ -989,7 +1023,17 @@ export function TerminalViewport({ session, tabId, isActive }: TerminalViewportP
         detachContextMenuListener = () => {
           containerRef.current?.removeEventListener('contextmenu', handleTerminalContextMenu);
         };
-        const closeContextMenu = () => setContextMenu(null);
+        const closeContextMenu = (event: PointerEvent) => {
+          if (
+            contextMenuRef.current &&
+            event.target instanceof Node &&
+            contextMenuRef.current.contains(event.target)
+          ) {
+            return;
+          }
+
+          setContextMenu(null);
+        };
         window.addEventListener('pointerdown', closeContextMenu);
         detachGlobalPointerListener = () => {
           window.removeEventListener('pointerdown', closeContextMenu);
@@ -1046,6 +1090,7 @@ export function TerminalViewport({ session, tabId, isActive }: TerminalViewportP
     >
       {contextMenu ? (
         <div
+          ref={contextMenuRef}
           className="absolute z-20 min-w-[13rem] rounded-2xl border border-[var(--otx-border)] bg-[var(--otx-panel-strong)] p-1.5 shadow-2xl backdrop-blur"
           style={{
             left: `${contextMenu.x}px`,
