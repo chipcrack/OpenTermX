@@ -2,6 +2,8 @@ pub mod commands;
 pub mod models;
 pub mod storage;
 mod host_keys;
+#[cfg(target_os = "linux")]
+mod linux_fontconfig;
 
 use storage::DatabaseState;
 use commands::ssh::TerminalManager;
@@ -9,6 +11,9 @@ use commands::sftp::SftpManager;
 use tauri::{Manager, WebviewWindowBuilder};
 
 pub fn run() {
+  #[cfg(target_os = "linux")]
+  linux_fontconfig::configure().expect("No se pudo preparar Fontconfig para OpenTermX");
+
   tauri::Builder::default()
     .setup(|app| {
       let main_window_config = app

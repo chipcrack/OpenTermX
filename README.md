@@ -59,6 +59,18 @@ chmod +x OpenTermX.AppImage
 ./OpenTermX.AppImage
 ```
 
+En Linux, OpenTermX prepara una configuracion privada en
+`$XDG_CONFIG_HOME/fontconfig/opentermx/fonts.conf` (por defecto,
+`~/.config/fontconfig/opentermx/fonts.conf`) antes de iniciar GTK/WebKit.
+Conserva la configuracion de fuentes del sistema y del usuario, pero excluye
+las entradas locales marcadas por Fontconfig como `fontwrapper=WOFF` para evitar el bucle de
+[WebKitGTK/Skia 325185](https://bugs.webkit.org/show_bug.cgi?id=325185).
+La variable `FONTCONFIG_FILE` se establece solo en OpenTermX y sus procesos
+hijos; otras aplicaciones no cargan esta regla automaticamente. No se borran
+fuentes ni caches, y no se modifica el almacenamiento de credenciales.
+Una variable `FONTCONFIG_FILE` definida explicitamente por el usuario o el
+launcher tiene prioridad y desactiva esta configuracion automatica.
+
 ## Ejecutar desde codigo
 
 ### Requisitos
